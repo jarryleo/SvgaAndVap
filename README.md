@@ -4,6 +4,13 @@
 
 项目作用：优化和测试svga库和vap库。
 
+## 📚 使用文档 / Guides
+
+| 库 / Library | 中文 | English |
+| --- | --- | --- |
+| SVGA（View + Compose） | [SVGA 使用指南](docs/svga_guide_zh.md) | [SVGA Guide](docs/svga_guide_en.md) |
+| VAP（View + Compose） | [VAP 使用指南](docs/vap_guide_zh.md) | [VAP Guide](docs/vap_guide_en.md) |
+
 ## 依赖接入
 
 本库通过 [JitPack](https://jitpack.io) 发布，共 3 个可自由组合的依赖（`lib_base` 为内部公共模块，会作为传递依赖自动引入，无需单独声明）：
