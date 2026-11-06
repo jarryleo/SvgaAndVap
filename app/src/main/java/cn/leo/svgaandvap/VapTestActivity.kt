@@ -21,7 +21,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,13 +30,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import cn.leo.base.download.DownloadState
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
-import com.tencent.qgame.animplayer.AnimView
 import com.tencent.qgame.animplayer.DynamicResource
-import com.tencent.qgame.animplayer.inter.SimpleAnimListener
-import com.tencent.qgame.animplayer.load
 
 private const val VAP_URL = "https://res.dawalive.com/gift/1767838791158?imageslim"
 
@@ -74,15 +69,11 @@ class VapTestActivity : ComponentActivity() {
 @Composable
 private fun VapTestScreen() {
     var selected by remember { mutableIntStateOf(0) }
-    // AnimView.load: loopCount 小于 1 时按 1 次播放
-    var loops by remember { mutableIntStateOf(1) }
+    val state = rememberVapPlayerState()
+    // AnimView.load: loopCount 小于 1 按播放 1 次；config 变化会自动触发重新加载
+    val loops = state.config.loopCount
     var status by remember { mutableStateOf("idle") }
-    var replayTick by remember { mutableIntStateOf(0) }
-    var animView by remember { mutableStateOf<AnimView?>(null) }
-
-    DisposableEffect(Unit) {
-        onDispose { animView?.stopPlay() }
-    }
+    val item = VAP_ITEMS[selected]
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("VAP 测试") }) },
@@ -96,7 +87,12 @@ private fun VapTestScreen() {
                 VAP_ITEMS.forEachIndexed { index, item ->
                     FilterChip(
                         selected = index == selected,
-                        onClick = { selected = index },
+                        onClick = {
+                            selected = index
+                            status =
+                                if (VAP_ITEMS[index].path.startsWith("http")) "downloading 0%"
+                                else "idle"
+                        },
                         label = { Text(item.label) },
                     )
                 }
@@ -105,7 +101,7 @@ private fun VapTestScreen() {
                 listOf(1 to "1 次", 3 to "3 次", 10 to "10 次").forEach { (count, label) ->
                     FilterChip(
                         selected = loops == count,
-                        onClick = { loops = count },
+                        onClick = { state.config = VapConfig(loopCount = count) },
                         label = { Text(label) },
                     )
                 }
@@ -118,53 +114,22 @@ private fun VapTestScreen() {
                     .background(Color(0xFF15171C), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                AndroidView(
+                VapPlayer(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
-                    factory = { context ->
-                        AnimView(context).apply {
-                            setAnimListener(object : SimpleAnimListener() {
-                                override fun onVideoStart() {
-                                    status = "playing"
-                                }
-
-                                override fun onVideoComplete() {
-                                    status = "complete"
-                                }
-
-                                override fun onVideoDestroy() {
-                                    status = "destroyed"
-                                }
-
-                                override fun onFailed(errorType: Int, errorMsg: String?) {
-                                    status = "failed: $errorMsg"
-                                }
-                            })
-                            animView = this
-                        }
-                    },
-                    update = { view ->
-                        // 资源或循环次数变化时才重新加载, 避免 update 反复触发 load
-                        val item = VAP_ITEMS[selected]
-                        val key = "${item.path}#$loops#$replayTick"
-                        if (view.tag != key) {
-                            view.tag = key
-                            status = if (item.path.startsWith("http")) "downloading 0%" else "idle"
-                            view.load(
-                                data = item.path,
-                                loopCount = loops,
-                                downloadState = { ds ->
-                                    status = when (ds.state) {
-                                        DownloadState.DOWNLOADING -> "downloading ${ds.progress}%"
-                                        DownloadState.FAILED ->
-                                            "download failed: ${ds.exception?.message}"
-
-                                        else -> status
-                                    }
-                                },
-                                dynamic = item.dynamic ?: {},
-                            )
+                    source = item.path,
+                    state = state,
+                    dynamic = item.dynamic,
+                    onAnimStart = { status = "playing" },
+                    onFrameStart = { status = "first frame" },
+                    onAnimEnd = { status = "complete" },
+                    onError = { _, errorMsg -> status = "failed: $errorMsg" },
+                    onDownloadState = { ds ->
+                        status = when (ds.state) {
+                            DownloadState.DOWNLOADING -> "downloading ${ds.progress}%"
+                            DownloadState.FAILED -> "download failed: ${ds.exception?.message}"
+                            else -> status
                         }
                     },
                 )
@@ -176,15 +141,13 @@ private fun VapTestScreen() {
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             ) {
                 OutlinedButton(
-                    onClick = {
-                        replayTick++
-                    },
+                    onClick = { state.startAnimation() },
                 ) {
                     Text("重播")
                 }
                 OutlinedButton(
                     onClick = {
-                        animView?.stopPlay()
+                        state.stop()
                         status = "stopped"
                     },
                 ) {

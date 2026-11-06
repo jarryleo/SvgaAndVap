@@ -7,4 +7,8 @@
     <item name="svga_compose_last_config" type="id" />
     <item name="svga_compose_last_res_id" type="id" />
 
+    <!--  Vap compose -->
+    <item name="vap_compose_last_source" type="id" />
+    <item name="vap_compose_last_config" type="id" />
+
 </resources>
