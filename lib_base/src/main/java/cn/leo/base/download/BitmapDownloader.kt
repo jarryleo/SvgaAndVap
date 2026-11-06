@@ -6,6 +6,7 @@ import cn.leo.base.bitmap.BitmapFileDecoder
 import cn.leo.base.bitmap.BitmapUrlDecoder
 import cn.leo.base.cache.BitmapCache
 import cn.leo.base.cache.BitmapDiskCache
+import cn.leo.base.cache.BitmapSourceCache
 import cn.leo.base.log.BaseLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,6 +34,8 @@ object BitmapDownloader : BitmapDownloadInterface {
         reqWidth: Int,
         reqHeight: Int
     ): Bitmap? {
+        // 初始化源文件缓存目录, 供 BitmapUrlDecoder 下载落盘后再解码
+        BitmapSourceCache.init(context)
         val key = BitmapCache.createKey(url, reqWidth, reqHeight)
         // 从内存缓存中获取
         val cacheData = BitmapCache.INSTANCE.getData(key)

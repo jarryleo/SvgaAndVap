@@ -12,7 +12,7 @@ import java.io.InputStream
  */
 object BitmapInputStreamDecoder : BitmapDecoder<InputStream>() {
 
-    @RequiresApi(Build.VERSION_CODES.S)
+    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreateSource(data: InputStream): ImageDecoder.Source? = runCatching {
         // ImageDecoder 没有公开的 InputStream 重载, 读入内存后建源
         val bytes = data.use { it.readBytes() }

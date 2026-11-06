@@ -11,7 +11,7 @@ import androidx.annotation.RequiresApi
  */
 object BitmapByteArrayDecoder : BitmapDecoder<ByteArray>() {
 
-    @RequiresApi(Build.VERSION_CODES.S)
+    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreateSource(data: ByteArray): ImageDecoder.Source? =
         ImageDecoder.createSource(data)
 

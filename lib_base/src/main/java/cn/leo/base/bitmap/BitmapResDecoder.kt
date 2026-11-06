@@ -12,7 +12,7 @@ import androidx.annotation.RequiresApi
  */
 class BitmapResDecoder(val context: Context) : BitmapDecoder<Int>() {
 
-    @RequiresApi(Build.VERSION_CODES.S)
+    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreateSource(data: Int): ImageDecoder.Source? =
         ImageDecoder.createSource(context.resources, data)
 

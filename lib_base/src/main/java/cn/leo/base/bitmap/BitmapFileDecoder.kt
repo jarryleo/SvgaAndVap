@@ -12,7 +12,7 @@ import java.io.File
  */
 object BitmapFileDecoder : BitmapDecoder<String>() {
 
-    @RequiresApi(Build.VERSION_CODES.S)
+    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreateSource(data: String): ImageDecoder.Source? =
         ImageDecoder.createSource(File(data))
 
