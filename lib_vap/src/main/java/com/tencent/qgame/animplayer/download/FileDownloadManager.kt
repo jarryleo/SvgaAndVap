@@ -1,0 +1,293 @@
+package com.tencent.qgame.animplayer.download
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import okhttp3.Call
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+
+/**
+ * @Author     :Leo
+ * Date        :2025/12/29
+ * Description : 基于kotlin和协程的文件下载器，使用flow进行状态管理
+ */
+
+@Suppress("Unused")
+data class DownloadStatus(
+    val url: String = "",
+    val progress: Int = 0,
+    val totalBytes: Long = 0,
+    val downloadedBytes: Long = 0,
+    val state: DownloadState = DownloadState.QUEUED,
+    val headers: Map<String, String> = emptyMap(),
+    val file: File? = null,
+    val exception: Exception? = null,
+) {
+    fun isSuccessful() = state == DownloadState.COMPLETED
+    fun isFailed() = state == DownloadState.FAILED
+    fun getFileOrNull() = file
+    fun getExceptionOrNull() = exception
+}
+
+enum class DownloadState {
+    QUEUED, DOWNLOADING, PAUSED, COMPLETED, FAILED, CANCELLED
+}
+
+class DownloadException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+@Suppress("Unused")
+class FileDownloadManager(
+    //OkHttp默认callTimeout=0(无总时长上限)，慢速滴流连接可无限占用下载槽位并阻塞渲染线程的同步等待，这里设总时长兜底(连接/读/写超时保持默认10s)
+    private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(60, TimeUnit.SECONDS)
+        .build(),
+    private val maxConcurrentDownloads: Int = 3
+) {
+    private var scope: CoroutineScope? = null
+    private val downloadJobs = ConcurrentHashMap<String, Job>()
+    private val downloadStatus = ConcurrentHashMap<String, MutableStateFlow<DownloadStatus>>()
+
+    private fun ensureScope() {
+        if (scope == null || scope?.isActive == false) {
+            scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        }
+    }
+
+    // 启动下载
+    fun download(
+        url: String,
+        saveFile: File,
+        headers: Map<String, String> = emptyMap()
+    ): Flow<DownloadStatus> {
+        // 如果正在下载，则返回现有状态
+        downloadStatus[url]?.let {
+            return it.asStateFlow()
+        }
+
+        val status = DownloadStatus(
+            url = url,
+            headers = headers,
+            file = saveFile,
+        )
+        val statusFlow = MutableStateFlow(status)
+        downloadStatus[url] = statusFlow
+        startDownload(statusFlow)
+        return statusFlow.asStateFlow()
+    }
+
+    private fun startDownload(state: MutableStateFlow<DownloadStatus>) {
+        // 控制并发数
+        if (downloadJobs.size >= maxConcurrentDownloads) {
+            return
+        }
+        val value = state.value
+        val url = value.url
+        val headers = value.headers
+        val file = value.file ?: return
+        //开始下载任务
+        ensureScope()
+        val job = scope?.launch {
+            downloadInternal(url, file, headers, state)
+        } ?: return
+        downloadJobs[url] = job
+    }
+
+    private fun downloadInternal(
+        url: String,
+        destination: File,
+        headers: Map<String, String>,
+        statusFlow: MutableStateFlow<DownloadStatus>
+    ) {
+        var call: Call? = null
+        var shadow: File? = null
+        try {
+            // shadow()必须在try内: 下载协程作用域没有CoroutineExceptionHandler,
+            // 这里抛出的异常会逃逸出协程直接崩溃,失败必须转为FAILED状态由调用方降级处理
+            shadow = destination.shadow()
+            statusFlow.value = statusFlow.value.copy(state = DownloadState.DOWNLOADING)
+
+            // 准备请求
+            val request = Request.Builder()
+                .url(url)
+                .apply {
+                    headers.forEach { (key, value) ->
+                        addHeader(key, value)
+                    }
+                }
+                .build()
+
+            call = okHttpClient.newCall(request)
+            val response = call.execute()
+
+            if (!response.isSuccessful) {
+                throw DownloadException("HTTP ${response.code}: ${response.message}")
+            }
+
+            val responseBody = response.body ?: throw DownloadException("Response body is null")
+
+            // 获取文件总大小
+            val totalBytes = responseBody.contentLength()
+            if (destination.exists()) {
+                if (destination.length() == totalBytes) {
+                    statusFlow.value = statusFlow.value.copy(state = DownloadState.COMPLETED)
+                    responseBody.close()
+                    return
+                } else {
+                    destination.delete()
+                }
+            }
+
+            if (shadow.exists()) {
+                shadow.delete()
+            }
+            var downloadedBytes = 0L
+
+            // 确保目标目录存在
+            shadow.parentFile?.let { parent ->
+                if (!parent.exists()) {
+                    parent.mkdirs()
+                }
+            }
+
+            FileOutputStream(shadow, false).use { output ->
+                val buffer = ByteArray(8192)
+                var bytesReceived = 0L
+                var lastProgress = 0
+                responseBody.byteStream().use { input ->
+                    while (true) {
+                        // 检查是否被取消
+                        ensureActive(url)
+
+                        val byteCount = input.read(buffer)
+                        if (byteCount == -1) break
+
+                        output.write(buffer, 0, byteCount)
+                        bytesReceived += byteCount
+                        downloadedBytes += byteCount
+
+                        // 更新进度
+                        val progress = if (totalBytes > 0) {
+                            ((downloadedBytes * 100) / totalBytes).toInt()
+                        } else 0
+
+                        if (progress != lastProgress) {
+                            lastProgress = progress
+                            statusFlow.value = DownloadStatus(
+                                progress = progress,
+                                totalBytes = totalBytes,
+                                downloadedBytes = downloadedBytes,
+                                state = DownloadState.DOWNLOADING,
+                                url = url,
+                            )
+                        }
+                    }
+                }
+            }
+
+            shadow.renameTo(destination)
+
+            statusFlow.value = DownloadStatus(
+                progress = 100,
+                totalBytes = totalBytes,
+                downloadedBytes = downloadedBytes,
+                state = DownloadState.COMPLETED,
+                file = destination,
+                url = url,
+            )
+
+
+        } catch (e: Exception) {
+            shadow?.delete()
+            if (e is CancellationException) {
+                statusFlow.value = statusFlow.value.copy(state = DownloadState.CANCELLED)
+            } else {
+                statusFlow.value =
+                    statusFlow.value.copy(state = DownloadState.FAILED, exception = e)
+            }
+        } finally {
+            call?.cancel()
+            jobDone(url)
+        }
+    }
+
+    private fun jobDone(url: String) {
+        downloadJobs.remove(url)?.let { job ->
+            if (!job.isCancelled) {
+                job.cancel()
+            }
+        }
+        downloadStatus.remove(url)
+        //开始下载任务
+        downloadStatus.filter {
+            it.value.value.state == DownloadState.QUEUED
+        }.forEach {
+            startDownload(it.value)
+        }
+    }
+
+    // 暂停下载
+    fun pauseDownload(url: String) {
+        jobDone(url)
+        val status = downloadStatus[url] ?: return
+        status.value = status.value.copy(state = DownloadState.PAUSED)
+    }
+
+    // 取消下载并删除文件
+    fun cancelDownload(url: String, deleteFile: Boolean = true) {
+        jobDone(url)
+        val status = downloadStatus[url] ?: return
+        status.value = status.value.copy(state = DownloadState.CANCELLED)
+        if (deleteFile) {
+            status.value.file?.delete()
+        }
+    }
+
+    // 获取所有下载状态
+    fun getAllDownloadStatus(): Map<String, DownloadStatus> {
+        return downloadStatus.mapValues { it.value.value }
+    }
+
+    // 获取特定下载的状态
+    fun getDownloadStatus(url: String): DownloadStatus? {
+        return downloadStatus[url]?.value
+    }
+
+    // 清理资源
+    fun cleanup() {
+        scope?.cancel()
+        scope = null
+        downloadJobs.clear()
+        downloadStatus.clear()
+    }
+
+    private fun ensureActive(url: String) {
+        val job = downloadJobs[url]
+        if (job?.isCancelled == true) {
+            throw CancellationException("Download was cancelled")
+        }
+    }
+
+    fun File.shadow(): File {
+        // 不用canonicalPath: 其底层realpath()在部分机型(如Infinix X663/Android 12)上对未落盘的
+        // 文件返回EINVAL,直接抛IOException("Invalid argument")导致崩溃(Crashlytics issue
+        // 8fb677edde08d3520ff94da35f468a37)。临时文件只需与目标文件同目录同名,absolutePath即可
+        val shadowPath = "$absolutePath.download"
+        return File(shadowPath)
+    }
+}
