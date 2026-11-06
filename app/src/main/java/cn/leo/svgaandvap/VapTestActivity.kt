@@ -35,8 +35,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
 import com.tencent.qgame.animplayer.AnimView
 import com.tencent.qgame.animplayer.DynamicResource
+import com.tencent.qgame.animplayer.download.DownloadState
 import com.tencent.qgame.animplayer.inter.SimpleAnimListener
 import com.tencent.qgame.animplayer.load
+
+private const val VAP_URL = "https://res.dawalive.com/gift/1767838791158?imageslim"
 
 private data class VapItem(
     val label: String,
@@ -51,6 +54,7 @@ private val VAP_ITEMS = listOf(
     },
     VapItem("special_size_750", "vap/special_size_750.mp4"),
     VapItem("vapx", "vap/vapx.mp4"),
+    VapItem("gift (网络)", VAP_URL),
 )
 
 class VapTestActivity : ComponentActivity() {
@@ -146,9 +150,19 @@ private fun VapTestScreen() {
                         val key = "${item.path}#$loops#$replayTick"
                         if (view.tag != key) {
                             view.tag = key
+                            status = if (item.path.startsWith("http")) "downloading 0%" else "idle"
                             view.load(
                                 data = item.path,
                                 loopCount = loops,
+                                downloadState = { ds ->
+                                    status = when (ds.state) {
+                                        DownloadState.DOWNLOADING -> "downloading ${ds.progress}%"
+                                        DownloadState.FAILED ->
+                                            "download failed: ${ds.exception?.message}"
+
+                                        else -> status
+                                    }
+                                },
                                 dynamic = item.dynamic ?: {},
                             )
                         }

@@ -50,15 +50,17 @@ class DownloadException(message: String, cause: Throwable? = null) : Exception(m
 
 @Suppress("Unused")
 class FileDownloadManager(
-    //OkHttp默认callTimeout=0(无总时长上限)，慢速滴流连接可无限占用下载槽位并阻塞渲染线程的同步等待，这里设总时长兜底(连接/读/写超时保持默认10s)
-    private val okHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .callTimeout(60, TimeUnit.SECONDS)
-        .build(),
     private val maxConcurrentDownloads: Int = 3
 ) {
+    companion object {
+        val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+
     private var scope: CoroutineScope? = null
     private val downloadJobs = ConcurrentHashMap<String, Job>()
     private val downloadStatus = ConcurrentHashMap<String, MutableStateFlow<DownloadStatus>>()

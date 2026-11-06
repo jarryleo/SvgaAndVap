@@ -17,6 +17,7 @@ import java.net.URL
 import java.net.URLDecoder
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * @Author     :Leo
@@ -60,7 +61,7 @@ object BitmapDownloader : BitmapDownloadInterface {
             "downloadBitmap url = $url, reqWidth = $reqWidth, reqHeight = $reqHeight"
         )
         downLoadQueue.add(url)
-        val bitmap = withTimeoutOrNull(30_000) {
+        val bitmap = withTimeoutOrNull(30.seconds) {
             suspendCancellableCoroutine {
                 val decode = try {
                     URLDecoder.decode(url, "UTF-8")

@@ -39,6 +39,9 @@ import com.opensource.svgaplayer.SVGACallback
 import com.opensource.svgaplayer.SVGAConfig
 import com.opensource.svgaplayer.SVGAImageView
 
+private const val SVGA_URL =
+    "https://github.com/yyued/SVGA-Samples/blob/master/posche.svga?raw=true"
+
 private data class SvgaItem(val label: String, val path: String)
 
 private val SVGA_ITEMS = listOf(
@@ -46,6 +49,7 @@ private val SVGA_ITEMS = listOf(
     SvgaItem("Castle", "svga/Castle.svga"),
     SvgaItem("MerryChristmas", "svga/MerryChristmas.svga"),
     SvgaItem("rose", "svga/rose.svga"),
+    SvgaItem("posche (网络)", SVGA_URL),
 )
 
 class SvgaTestActivity : ComponentActivity() {
@@ -146,10 +150,19 @@ private fun SvgaTestScreen() {
                     },
                     update = { view ->
                         // 资源或循环次数变化时才重新加载, 避免 update 反复触发 load
-                        val key = "${SVGA_ITEMS[selected].path}#$loops#$replayTick"
+                        val item = SVGA_ITEMS[selected]
+                        val key = "${item.path}#$loops#$replayTick"
                         if (view.tag != key) {
                             view.tag = key
-                            view.load(SVGA_ITEMS[selected].path, SVGAConfig(loopCount = loops))
+                            status = if (item.path.startsWith("http")) "loading" else "idle"
+                            view.load(
+                                source = item.path,
+                                config = SVGAConfig(loopCount = loops),
+                                onError = {
+                                    status = "load failed"
+                                    paused = false
+                                },
+                            )
                         }
                     },
                 )

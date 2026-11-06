@@ -2,10 +2,10 @@ package com.tencent.qgame.animplayer.bitmap
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.tencent.qgame.animplayer.download.FileDownloadManager
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URL
-import java.util.concurrent.TimeUnit
 
 /**
  * 通过Url解码 Bitmap
@@ -13,10 +13,7 @@ import java.util.concurrent.TimeUnit
 internal object BitmapUrlDecoder : BitmapDecoder<URL>() {
     private const val TIMEOUT = 30L
     private val okHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(TIMEOUT, TimeUnit.SECONDS)
-            .readTimeout(TIMEOUT, TimeUnit.SECONDS)
-            .build()
+        FileDownloadManager.okHttpClient
     }
 
     override fun onDecode(data: URL, ops: BitmapFactory.Options): Bitmap? {
