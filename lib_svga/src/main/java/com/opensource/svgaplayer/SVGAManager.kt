@@ -32,7 +32,7 @@ object SVGAManager {
         context: Context,
         memoryCacheMaxBytes: Long = SVGAMemoryCache.defaultMaxBytes,
         httpCacheSize: Long = (256 * 1024 * 1024).toLong(),
-        logEnabled: Boolean = BuildConfig.DEBUG,
+        logEnabled: Boolean = false,
         loggerProxy: ILogger? = null,
         urlDecoder: UrlDecoder? = null,
         threadPoolExecutor: ThreadPoolExecutor? = null
