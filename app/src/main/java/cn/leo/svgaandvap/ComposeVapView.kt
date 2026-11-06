@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import cn.leo.base.download.DownloadStatus
 import com.tencent.qgame.animplayer.AnimView
+import com.tencent.qgame.animplayer.Constant
 import com.tencent.qgame.animplayer.DynamicResource
 import com.tencent.qgame.animplayer.inter.SimpleAnimListener
 import com.tencent.qgame.animplayer.load
@@ -157,6 +158,7 @@ fun VapPlayer(
     state: VapState = rememberVapPlayerState(),
     scaleType: ScaleType = ScaleType.FIT_CENTER,
     mute: Boolean = false,
+    enableVersion1: Boolean = false,
     dynamic: (DynamicResource.() -> Unit)? = null,
     onAnimStart: () -> Unit = {},
     onFrameStart: () -> Unit = {},
@@ -180,6 +182,10 @@ fun VapPlayer(
         modifier = modifier,
         factory = { context ->
             AnimView(context).apply {
+                if (enableVersion1) {
+                    enableVersion1(true)
+                    setVideoMode(Constant.VIDEO_MODE_SPLIT_HORIZONTAL_REVERSE)
+                }
                 setAnimListener(object : SimpleAnimListener() {
                     override fun onVideoStart() {
                         currentOnAnimStart()

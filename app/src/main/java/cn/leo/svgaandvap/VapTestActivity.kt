@@ -43,11 +43,17 @@ private data class VapItem(
 )
 
 private val VAP_ITEMS = listOf(
-    VapItem("demo", "vap/demo.mp4") {
-        // demo.mp4 内置动态元素配置, 用 assets 头像图填充(用法见 lib_vap/README.MD)
+    VapItem("demo", "vap/demo.mp4"),
+    VapItem("pk_start", "vap/pk_start.mp4") {
+        // 内置动态元素配置, 用 assets 头像图填充(用法见 lib_vap/README.MD)
         setImage("avatar1", "vap/head.png")
+        //setImage("avatar1", "https://res.dawalive.com/FtRBVni0G0T7zcSWmShW-fnHwktQ?imageslim")
+        setImage("avatar2", "https://picsum.photos/300/300?random=2")
+        setText("nick1", "测试长文本跑马灯效果测试长文本跑马灯效果测试长文本跑马灯效果")
+        setText("nick2", "nick2")
+        setText("ID1", "ID1")
+        setText("ID2", "ID2")
     },
-    VapItem("special_size_750", "vap/special_size_750.mp4"),
     VapItem("vapx", "vap/vapx.mp4"),
     VapItem("gift (网络)", VAP_URL),
 )
