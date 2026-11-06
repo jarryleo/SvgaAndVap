@@ -1,8 +1,8 @@
-package com.tencent.qgame.animplayer.bitmap
+package cn.leo.base.bitmap
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import com.tencent.qgame.animplayer.download.FileDownloadManager
+import cn.leo.base.download.FileDownloadManager
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URL
@@ -10,7 +10,7 @@ import java.net.URL
 /**
  * 通过Url解码 Bitmap
  */
-internal object BitmapUrlDecoder : BitmapDecoder<URL>() {
+object BitmapUrlDecoder : BitmapDecoder<URL>() {
     private const val TIMEOUT = 30L
     private val okHttpClient: OkHttpClient by lazy {
         FileDownloadManager.okHttpClient

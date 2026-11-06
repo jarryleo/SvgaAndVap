@@ -1,18 +1,16 @@
-package com.opensource.svgaplayer.bitmap
+package cn.leo.base.bitmap
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 
 /**
- * 通过Asset解码 Bitmap
- *
- * Create by im_dsd 2020/7/7 17:50
+ * 通过资源id解码 Bitmap
  */
-internal class SVGABitmapResDecoder(val context: Context) : SVGABitmapDecoder<Int>() {
+class BitmapResDecoder(val context: Context) : BitmapDecoder<Int>() {
 
     override fun onDecode(data: Int, ops: BitmapFactory.Options): Bitmap? {
-        return kotlin.runCatching {
+        return runCatching {
             BitmapFactory.decodeResource(context.resources, data, ops)
         }.getOrNull()
     }

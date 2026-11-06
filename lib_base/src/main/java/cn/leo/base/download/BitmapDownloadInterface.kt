@@ -1,4 +1,4 @@
-package com.tencent.qgame.animplayer.download
+package cn.leo.base.download
 
 import android.content.Context
 import android.graphics.Bitmap

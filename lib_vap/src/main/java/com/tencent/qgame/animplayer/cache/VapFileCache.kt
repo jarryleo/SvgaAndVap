@@ -106,19 +106,4 @@ object VapFileCache : CoroutineScope by MainScope() {
             }
         }
     }
-
-    internal fun buildCacheBitmapFile(cacheKey: String, context: Context): Flow<File> {
-        return callbackFlow {
-            if (cacheDir.isEmpty()) {
-                init(context) {
-                    trySend(File("$cacheDir$cacheKey.png"))
-                }
-            } else {
-                trySend(File("$cacheDir$cacheKey.png"))
-            }
-            awaitClose {
-                cancel()
-            }
-        }
-    }
 }

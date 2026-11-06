@@ -32,10 +32,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import cn.leo.base.download.DownloadState
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
 import com.tencent.qgame.animplayer.AnimView
 import com.tencent.qgame.animplayer.DynamicResource
-import com.tencent.qgame.animplayer.download.DownloadState
 import com.tencent.qgame.animplayer.inter.SimpleAnimListener
 import com.tencent.qgame.animplayer.load
 

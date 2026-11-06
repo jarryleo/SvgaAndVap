@@ -1,4 +1,4 @@
-package com.tencent.qgame.animplayer.download
+package cn.leo.base.download
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -11,13 +11,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * @Author     :Leo
@@ -53,11 +58,29 @@ class FileDownloadManager(
     private val maxConcurrentDownloads: Int = 3
 ) {
     companion object {
+
+        // 创建信任所有证书的 TrustManager（沿用 svga 库的忽略证书校验策略, 两库统一行为）
+        private val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        })
+
+        // 创建 SSL Context
+        private val trustAllSslContext = SSLContext.getInstance("TLS").apply {
+            init(null, trustAllCerts, SecureRandom())
+        }
+
+        // 创建 HostnameVerifier
+        private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
+
         val okHttpClient: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
+            .sslSocketFactory(trustAllSslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+            .hostnameVerifier(trustAllHostnameVerifier)
             .build()
     }
 
@@ -116,7 +139,7 @@ class FileDownloadManager(
         headers: Map<String, String>,
         statusFlow: MutableStateFlow<DownloadStatus>
     ) {
-        var call: Call? = null
+        var call: okhttp3.Call? = null
         var shadow: File? = null
         try {
             // shadow()必须在try内: 下载协程作用域没有CoroutineExceptionHandler,
@@ -178,7 +201,6 @@ class FileDownloadManager(
 
                         val byteCount = input.read(buffer)
                         if (byteCount == -1) break
-
                         output.write(buffer, 0, byteCount)
                         bytesReceived += byteCount
                         downloadedBytes += byteCount
@@ -286,9 +308,6 @@ class FileDownloadManager(
     }
 
     fun File.shadow(): File {
-        // 不用canonicalPath: 其底层realpath()在部分机型(如Infinix X663/Android 12)上对未落盘的
-        // 文件返回EINVAL,直接抛IOException("Invalid argument")导致崩溃(Crashlytics issue
-        // 8fb677edde08d3520ff94da35f468a37)。临时文件只需与目标文件同目录同名,absolutePath即可
         val shadowPath = "$absolutePath.download"
         return File(shadowPath)
     }

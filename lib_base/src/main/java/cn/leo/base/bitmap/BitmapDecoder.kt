@@ -1,4 +1,4 @@
-package com.tencent.qgame.animplayer.bitmap
+package cn.leo.base.bitmap
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -8,7 +8,7 @@ import android.graphics.BitmapFactory
  *
  * <T> 需要加载的数据类型
  */
-internal abstract class BitmapDecoder<T> {
+abstract class BitmapDecoder<T> {
 
     fun decodeBitmapFrom(data: T, reqWidth: Int, reqHeight: Int): Bitmap? {
         return BitmapFactory.Options().run {

@@ -2,14 +2,15 @@ package com.tencent.qgame.animplayer
 
 import android.content.Context
 import android.graphics.Bitmap
+import cn.leo.base.bitmap.BitmapByteArrayDecoder
+import cn.leo.base.bitmap.BitmapFileDecoder
+import cn.leo.base.bitmap.BitmapResDecoder
+import cn.leo.base.cache.BitmapDiskCache
+import cn.leo.base.download.DownloadState
+import cn.leo.base.download.DownloadStatus
 import com.tencent.qgame.animplayer.anim.AnimImage
 import com.tencent.qgame.animplayer.anim.GifDecoder
-import com.tencent.qgame.animplayer.bitmap.BitmapByteArrayDecoder
-import com.tencent.qgame.animplayer.bitmap.BitmapFileDecoder
-import com.tencent.qgame.animplayer.bitmap.BitmapResDecoder
 import com.tencent.qgame.animplayer.cache.VapFileCache
-import com.tencent.qgame.animplayer.download.DownloadState
-import com.tencent.qgame.animplayer.download.DownloadStatus
 import com.tencent.qgame.animplayer.inter.IFetchResource
 import com.tencent.qgame.animplayer.mix.Resource
 import com.tencent.qgame.animplayer.util.ALog
@@ -277,8 +278,7 @@ private fun decodeImageRes(context: Context, resId: Int, reqWidth: Int, reqHeigh
  */
 private suspend fun downloadImageFile(context: Context, url: String): File? {
     return runCatching {
-        val cacheFile =
-            VapFileCache.buildCacheBitmapFile(VapFileCache.buildCacheKey(url), context).first()
+        val cacheFile = BitmapDiskCache.cacheFile(context, BitmapDiskCache.buildKey(url))
         if (!cacheFile.exists()) {
             val status =
                 VapManager.downLoad(url, cacheFile).first { it.isSuccessful() || it.isFailed() }

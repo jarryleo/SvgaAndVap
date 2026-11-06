@@ -1,26 +1,23 @@
 package com.opensource.svgaplayer.download
 
-import android.net.http.HttpResponseCache
-import com.opensource.svgaplayer.bitmap.SVGABitmapUrlDecoder
+import cn.leo.base.download.FileDownloadManager
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.coroutine.SvgaCoroutineManager
 import com.opensource.svgaplayer.utils.log.LogUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
+import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import java.net.HttpURLConnection
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 
 open class FileDownloader {
 
     companion object {
         private const val TAG = "SVGAFileDownloader"
         private const val SIZE = 4096
-        private const val TIMEOUT = 30_000
     }
 
     /**
@@ -46,27 +43,17 @@ open class FileDownloader {
                     TAG, "================ file download start ================ " +
                             "\r\n url = $url"
                 )
-                if (HttpResponseCache.getInstalled() == null) {
-                    LogUtils.error(
-                        TAG,
-                        "在配置 HttpResponseCache 前 SVGAParser 无法缓存."
-                                + " 查看 https://github.com/yyued/SVGAPlayer-Android#cache "
-                    )
-                }
-
-                (url.openConnection() as? HttpURLConnection)?.let {
-                    // 如果是 HTTPS 连接，设置 SSL 忽略证书验证
-                    if (it is HttpsURLConnection) {
-                        it.sslSocketFactory = SVGABitmapUrlDecoder.sslContext.socketFactory
-                        it.hostnameVerifier = SVGABitmapUrlDecoder.hostnameVerifier
+                // 走 base 共享 OkHttpClient（连接复用，HTTPS 忽略证书校验与 vap 保持一致）
+                val request = Request.Builder()
+                    .url(url)
+                    .build()
+                FileDownloadManager.okHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw Exception("HTTP ${response.code}: ${response.message}")
                     }
-                    it.connectTimeout = TIMEOUT
-                    it.readTimeout = TIMEOUT
-                    it.requestMethod = "GET"
-                    it.setRequestProperty("Connection", "close")
-                    it.connect()
+                    val body = response.body ?: throw Exception("Response body is null")
                     FileOutputStream(tmpFile).use { output ->
-                        it.inputStream.use { inputStream ->
+                        body.byteStream().use { inputStream ->
                             val buffer = ByteArray(SIZE)
                             var count: Int
                             while (isActive) {
@@ -78,26 +65,26 @@ open class FileDownloader {
                             }
                         }
                     }
-                    if (isActive) {
-                        LogUtils.info(
-                            TAG, "================ file download success ================"
-                        )
-                        if (cacheFile.exists()) {
-                            cacheFile.delete()
-                        }
-                        if (!tmpFile.renameTo(cacheFile)) {
-                            //rename 失败（目标被并发占用等）时退化为拷贝发布
-                            tmpFile.copyTo(cacheFile, overwrite = true)
-                            tmpFile.delete()
-                        }
-                        complete(cacheFile.inputStream())
-                    } else {
-                        LogUtils.info(
-                            TAG, "================ file download cancel ================"
-                        )
-                        tmpFile.delete()
-                        failure(CancellationException("download cancel"))
+                }
+                if (isActive) {
+                    LogUtils.info(
+                        TAG, "================ file download success ================"
+                    )
+                    if (cacheFile.exists()) {
+                        cacheFile.delete()
                     }
+                    if (!tmpFile.renameTo(cacheFile)) {
+                        //rename 失败（目标被并发占用等）时退化为拷贝发布
+                        tmpFile.copyTo(cacheFile, overwrite = true)
+                        tmpFile.delete()
+                    }
+                    complete(cacheFile.inputStream())
+                } else {
+                    LogUtils.info(
+                        TAG, "================ file download cancel ================"
+                    )
+                    tmpFile.delete()
+                    failure(CancellationException("download cancel"))
                 }
             } catch (e: Exception) {
                 tmpFile.delete()

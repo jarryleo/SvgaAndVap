@@ -20,5 +20,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":lib_base"))
+    // 公共 API（VapManager、AnimView.load 回调等）暴露了 base 的类型，需以 api 传递
+    api(project(":lib_base"))
 }

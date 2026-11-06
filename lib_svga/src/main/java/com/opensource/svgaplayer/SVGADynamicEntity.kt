@@ -9,11 +9,11 @@ import android.text.BoringLayout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
-import com.opensource.svgaplayer.bitmap.SVGABitmapFileDecoder
-import com.opensource.svgaplayer.bitmap.SVGABitmapInputStreamDecoder
-import com.opensource.svgaplayer.bitmap.SVGABitmapResDecoder
+import cn.leo.base.bitmap.BitmapFileDecoder
+import cn.leo.base.bitmap.BitmapInputStreamDecoder
+import cn.leo.base.bitmap.BitmapResDecoder
+import cn.leo.base.download.BitmapDownloader
 import com.opensource.svgaplayer.coroutine.SvgaCoroutineManager
-import com.opensource.svgaplayer.download.BitmapDownloader
 import com.opensource.svgaplayer.entities.SVGATextEntity
 import com.opensource.svgaplayer.url.UrlDecoderManager
 import com.opensource.svgaplayer.utils.BitmapTransformation
@@ -159,18 +159,18 @@ class SVGADynamicEntity(val context: Context) {
                     val realUrl =
                         UrlDecoderManager.getUrlDecoder().decodeImageUrl(url, width, height)
                     bitmap = if (SourceUtil.isUrl(realUrl)) {
-                        BitmapDownloader.downloadBitmap(realUrl, width, height)
+                        BitmapDownloader.downloadBitmap(context, realUrl, width, height)
                     } else if (SourceUtil.isFilePath(realUrl)) {
-                        SVGABitmapFileDecoder.decodeBitmapFrom(realUrl, width, height)
+                        BitmapFileDecoder.decodeBitmapFrom(realUrl, width, height)
                     } else {
-                        SVGABitmapInputStreamDecoder.decodeBitmapFrom(
+                        BitmapInputStreamDecoder.decodeBitmapFrom(
                             context.assets.open(realUrl),
                             width,
                             height
                         )
                     }
                 } else if (resId != null) {
-                    bitmap = SVGABitmapResDecoder(context).decodeBitmapFrom(resId, width, height)
+                    bitmap = BitmapResDecoder(context).decodeBitmapFrom(resId, width, height)
                 }
 
                 if (bitmap != null && isActive) {

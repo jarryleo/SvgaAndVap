@@ -1,8 +1,9 @@
-package com.tencent.qgame.animplayer.cache
+package cn.leo.base.cache
 
 import android.graphics.Bitmap
 import android.util.LruCache
 import java.lang.ref.WeakReference
+import java.security.MessageDigest
 
 /**
  * @Description bitmap内存缓存
@@ -66,7 +67,7 @@ class BitmapCache(private val cacheLimit: Int = limitCount) {
          */
         fun createKey(path: String, width: Int, height: Int): String {
             return "key:{path = $path width = $width height = $height}".let {
-                VapFileCache.buildCacheKey(it)
+                BitmapDiskCache.buildKey(it)
             }
         }
     }

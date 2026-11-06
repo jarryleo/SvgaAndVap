@@ -1,14 +1,13 @@
-package com.tencent.qgame.animplayer.download
+package cn.leo.base.download
 
 import android.content.Context
 import android.graphics.Bitmap
-import com.tencent.qgame.animplayer.bitmap.BitmapFileDecoder
-import com.tencent.qgame.animplayer.bitmap.BitmapUrlDecoder
-import com.tencent.qgame.animplayer.cache.BitmapCache
-import com.tencent.qgame.animplayer.cache.VapFileCache
-import com.tencent.qgame.animplayer.util.ALog
+import cn.leo.base.bitmap.BitmapFileDecoder
+import cn.leo.base.bitmap.BitmapUrlDecoder
+import cn.leo.base.cache.BitmapCache
+import cn.leo.base.cache.BitmapDiskCache
+import cn.leo.base.log.BaseLog
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -22,9 +21,10 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * @Author     :Leo
  * Date        :2024/7/2
- * Description : Bitmap下载器
+ * Description : Bitmap下载器（svga/vap 共享, 内存缓存 -> 磁盘缓存 -> 网络下载）
  */
 object BitmapDownloader : BitmapDownloadInterface {
+    private const val TAG = "BitmapDownloader"
     private val downLoadQueue = ConcurrentLinkedQueue<String>()
 
     override suspend fun downloadBitmap(
@@ -37,8 +37,8 @@ object BitmapDownloader : BitmapDownloadInterface {
         // 从内存缓存中获取
         val cacheData = BitmapCache.INSTANCE.getData(key)
         if (cacheData != null) {
-            ALog.d(
-                "BitmapDownloader",
+            BaseLog.d(
+                TAG,
                 "memory cache hit, bitmap = $cacheData, reqWidth = $reqWidth, reqHeight = $reqHeight"
             )
             return cacheData
@@ -47,8 +47,8 @@ object BitmapDownloader : BitmapDownloadInterface {
         val diskData = getBitmapFromDisk(context, key, reqWidth, reqHeight)
         if (diskData != null) {
             BitmapCache.INSTANCE.putData(key, diskData)
-            ALog.d(
-                "BitmapDownloader",
+            BaseLog.d(
+                TAG,
                 "disk cache hit, bitmap = $cacheData, reqWidth = $reqWidth, reqHeight = $reqHeight"
             )
             return diskData
@@ -56,8 +56,8 @@ object BitmapDownloader : BitmapDownloadInterface {
         if (downLoadQueue.contains(url)) {
             return null
         }
-        ALog.d(
-            "BitmapDownloader",
+        BaseLog.d(
+            TAG,
             "downloadBitmap url = $url, reqWidth = $reqWidth, reqHeight = $reqHeight"
         )
         downLoadQueue.add(url)
@@ -90,20 +90,20 @@ object BitmapDownloader : BitmapDownloadInterface {
             }
         }
         downLoadQueue.remove(url)
-        ALog.d("BitmapDownloader", "downloadBitmap bitmap = $bitmap")
+        BaseLog.d(TAG, "downloadBitmap bitmap = $bitmap")
         if (bitmap != null) {
             BitmapCache.INSTANCE.putData(key, bitmap)
         }
         return bitmap
     }
 
-    private suspend fun getBitmapFromDisk(
+    private fun getBitmapFromDisk(
         context: Context,
         cacheKey: String,
         reqWidth: Int,
         reqHeight: Int
     ): Bitmap? {
-        val cacheFile = VapFileCache.buildCacheBitmapFile(cacheKey, context).first()
+        val cacheFile = BitmapDiskCache.cacheFile(context, cacheKey)
         if (!cacheFile.exists()) {
             return null
         }
@@ -115,7 +115,7 @@ object BitmapDownloader : BitmapDownloadInterface {
         cacheKey: String,
         bitmap: Bitmap
     ) = withContext(Dispatchers.IO) {
-        val cacheFile = VapFileCache.buildCacheBitmapFile(cacheKey, context).first()
+        val cacheFile = BitmapDiskCache.cacheFile(context, cacheKey)
         if (!cacheFile.exists()) {
             cacheFile.createNewFile()
         }

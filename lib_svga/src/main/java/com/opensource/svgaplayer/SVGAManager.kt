@@ -2,7 +2,8 @@ package com.opensource.svgaplayer
 
 import android.content.Context
 import android.net.http.HttpResponseCache
-import com.opensource.svgaplayer.cache.SVGABitmapCache
+import cn.leo.base.cache.BitmapCache
+import cn.leo.base.cache.BitmapDiskCache
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.cache.SVGAMemoryCache
 import com.opensource.svgaplayer.download.FileDownloader
@@ -128,7 +129,7 @@ object SVGAManager {
     @JvmStatic
     fun onLowMemory() {
         SVGAMemoryCache.INSTANCE.clear()
-        SVGABitmapCache.INSTANCE.clear()
+        BitmapCache.INSTANCE.clear()
     }
 
     /**
@@ -137,8 +138,9 @@ object SVGAManager {
     @JvmStatic
     fun clearCache() {
         SVGAMemoryCache.INSTANCE.clear()
-        SVGABitmapCache.INSTANCE.clear()
+        BitmapCache.INSTANCE.clear()
         SVGAFileCache.clearCache()
+        appContext?.let { BitmapDiskCache.clear(it) }
         reinstallHttpCache()
     }
 
