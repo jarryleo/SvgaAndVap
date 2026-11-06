@@ -33,11 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
-import com.opensource.svgaplayer.SVGACallback
 import com.opensource.svgaplayer.SVGAConfig
-import com.opensource.svgaplayer.SVGAImageView
 
 private const val SVGA_URL =
     "https://github.com/yyued/SVGA-Samples/blob/master/posche.svga?raw=true"
@@ -69,12 +66,12 @@ class SvgaTestActivity : ComponentActivity() {
 @Composable
 private fun SvgaTestScreen() {
     var selected by remember { mutableIntStateOf(0) }
-    // SVGAImageView: loops <= 0 表示无限循环
-    var loops by remember { mutableIntStateOf(0) }
+    val state = rememberSvgaPlayerState()
+    // SVGAImageView: loops <= 0 表示无限循环；config 变化会自动触发重新加载
+    val loops = state.config?.loopCount ?: 0
     var status by remember { mutableStateOf("idle") }
     var paused by remember { mutableStateOf(false) }
-    var replayTick by remember { mutableIntStateOf(0) }
-    var svgaView by remember { mutableStateOf<SVGAImageView?>(null) }
+    val item = SVGA_ITEMS[selected]
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("SVGA 测试") }) },
@@ -91,6 +88,8 @@ private fun SvgaTestScreen() {
                         onClick = {
                             selected = index
                             paused = false
+                            status =
+                                if (SVGA_ITEMS[index].path.startsWith("http")) "loading" else "idle"
                         },
                         label = { Text(item.label) },
                     )
@@ -100,7 +99,7 @@ private fun SvgaTestScreen() {
                 listOf(0 to "无限", 1 to "1 次", 3 to "3 次").forEach { (count, label) ->
                     FilterChip(
                         selected = loops == count,
-                        onClick = { loops = count },
+                        onClick = { state.config = SVGAConfig(loopCount = count) },
                         label = { Text(label) },
                     )
                 }
@@ -113,57 +112,21 @@ private fun SvgaTestScreen() {
                     .background(Color(0xFF15171C), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                AndroidView(
+                SvgaPlayer(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
-                    factory = { context ->
-                        SVGAImageView(context).apply {
-                            callback = object : SVGACallback {
-                                override fun onStart() {
-                                    status = "playing"
-                                }
-
-                                override fun onPause() {
-                                    status = "paused"
-                                }
-
-                                override fun onResume() {
-                                    status = "playing"
-                                }
-
-                                override fun onFinished() {
-                                    status = "finished"
-                                    paused = false
-                                }
-
-                                override fun onRepeat() {
-                                    status = "repeat"
-                                }
-
-                                override fun onCancel() {
-                                    status = "canceled"
-                                }
-                            }
-                            svgaView = this
-                        }
+                    svgaUrl = item.path,
+                    state = state,
+                    onAnimStart = { status = "playing" },
+                    onFrameStart = { status = "first frame" },
+                    onAnimEnd = {
+                        status = "finished"
+                        paused = false
                     },
-                    update = { view ->
-                        // 资源或循环次数变化时才重新加载, 避免 update 反复触发 load
-                        val item = SVGA_ITEMS[selected]
-                        val key = "${item.path}#$loops#$replayTick"
-                        if (view.tag != key) {
-                            view.tag = key
-                            status = if (item.path.startsWith("http")) "loading" else "idle"
-                            view.load(
-                                source = item.path,
-                                config = SVGAConfig(loopCount = loops),
-                                onError = {
-                                    status = "load failed"
-                                    paused = false
-                                },
-                            )
-                        }
+                    onError = {
+                        status = "load failed"
+                        paused = false
                     },
                 )
             }
@@ -175,26 +138,30 @@ private fun SvgaTestScreen() {
             ) {
                 OutlinedButton(
                     onClick = {
-                        svgaView?.let { view ->
-                            if (paused) view.resumeAnimation() else view.pauseAnimation()
-                            paused = !paused
+                        if (paused) {
+                            state.resume()
+                            status = "playing"
+                        } else {
+                            state.pause()
+                            status = "paused"
                         }
+                        paused = !paused
                     },
                 ) {
                     Text(if (paused) "继续" else "暂停")
                 }
                 OutlinedButton(
                     onClick = {
-                        replayTick++
                         paused = false
+                        state.startAnimation()
                     },
                 ) {
                     Text("重播")
                 }
                 OutlinedButton(
                     onClick = {
-                        svgaView?.stopAnimation()
                         paused = false
+                        state.stop()
                         status = "stopped"
                     },
                 ) {

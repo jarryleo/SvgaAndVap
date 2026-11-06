@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--  Svga compose -->
+    <item name="svga_compose_frame_state" type="id" />
+    <item name="svga_compose_last_url" type="id" />
+    <item name="svga_compose_last_config" type="id" />
+    <item name="svga_compose_last_res_id" type="id" />
+
+</resources>
