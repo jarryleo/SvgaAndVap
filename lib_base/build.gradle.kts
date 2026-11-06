@@ -22,6 +22,7 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.annotation)
     // okhttp 供 lib_svga / lib_vap 的下载器使用, 需以 api 传递
     api(platform(libs.okhttpPlatformBom))
     api(libs.okhttp3)
