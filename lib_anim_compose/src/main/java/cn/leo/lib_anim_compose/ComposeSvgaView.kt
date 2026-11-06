@@ -1,4 +1,4 @@
-package cn.leo.svgaandvap
+package cn.leo.lib_anim_compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.NonRestartableComposable
@@ -15,7 +15,7 @@ import com.opensource.svgaplayer.SVGADynamicEntity
 import com.opensource.svgaplayer.SVGAImageView
 
 /**
- * 命令式控制句柄，与内部持有的 [SVGAImageView] 一一绑定。
+ * 命令式控制句柄，与内部持有的 [com.opensource.svgaplayer.SVGAImageView] 一一绑定。
  * view 释放后由 [SvgaPlayer] 解绑，此后所有方法均为 no-op。
  */
 class SvgaController internal constructor(

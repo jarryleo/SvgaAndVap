@@ -33,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import cn.leo.lib_anim_compose.SvgaPlayer
+import cn.leo.lib_anim_compose.rememberSvgaPlayerState
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
 import com.opensource.svgaplayer.SVGAConfig
 

@@ -1,4 +1,4 @@
-package cn.leo.svgaandvap
+package cn.leo.lib_anim_compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.NonRestartableComposable
@@ -27,7 +27,7 @@ data class VapConfig(
 )
 
 /**
- * 命令式控制句柄，与内部持有的 [AnimView] 一一绑定。
+ * 命令式控制句柄，与内部持有的 [com.tencent.qgame.animplayer.AnimView] 一一绑定。
  * view 释放后由 [VapPlayer] 解绑，此后所有方法均为 no-op。
  */
 class VapController internal constructor(

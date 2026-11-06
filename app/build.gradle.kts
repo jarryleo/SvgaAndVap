@@ -37,7 +37,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":lib_base"))
+    implementation(project(":lib_anim_compose"))
     implementation(project(":lib_svga"))
     implementation(project(":lib_vap"))
     implementation(platform(libs.androidx.compose.bom))
