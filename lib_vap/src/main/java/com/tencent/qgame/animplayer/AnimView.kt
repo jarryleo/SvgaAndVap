@@ -45,6 +45,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 open class AnimView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -72,6 +73,14 @@ open class AnimView @JvmOverloads constructor(
 
     @Volatile
     internal var loadJob: Job? = null
+
+    // 动态网络图预下载任务(见 AnimViewExt.startDynamicImageDownload)
+    @Volatile
+    internal var dynamicDownloadJob: Job? = null
+
+    // 动态图加载会话代数号:每次 load(dynamic=...) 递增,
+    // 异步下载完成后的注入据此校验会话有效性,防止过期会话的图片注入新会话的同名tag
+    private val dynamicLoadEpoch = AtomicInteger(0)
 
     private val player: AnimPlayer by lazy {
         AnimPlayer(this).apply {
@@ -273,6 +282,8 @@ open class AnimView @JvmOverloads constructor(
         player.isDetachedFromWindow = true
         loadJob?.cancel("onDetachedFromWindow")
         loadJob = null
+        dynamicDownloadJob?.cancel("onDetachedFromWindow")
+        dynamicDownloadJob = null
         onPause()
     }
 
@@ -292,6 +303,41 @@ open class AnimView @JvmOverloads constructor(
     override fun setFetchResource(fetchResource: IFetchResource?) {
         player.pluginManager.getMixAnimPlugin()?.resourceRequest = fetchResource
     }
+
+    /**
+     * 运行中更新动态图片元素(如网络动态图异步下载完成后注入, 见 load(dynamic=...) 说明)
+     * @param tag 动态元素 srcTag
+     * @param image [android.graphics.Bitmap] 或动图 [com.tencent.qgame.animplayer.anim.AnimImage]
+     */
+    fun updateDynamicImage(tag: String, image: Any?) {
+        updateDynamicImage(tag, image, dynamicLoadEpoch.get())
+    }
+
+    /**
+     * 带会话校验的注入:post 前后均校验代数号,过期会话(已被新 load 取代)的注入被丢弃,
+     * 防止旧会话图片落到新会话同名 tag 的 src 上
+     */
+    internal fun updateDynamicImage(tag: String, image: Any?, epoch: Int) {
+        val plugin = player.pluginManager.getMixAnimPlugin() ?: return
+        val update = Runnable {
+            if (dynamicLoadEpoch.get() != epoch) {
+                ALog.i(TAG, "updateDynamicImage drop stale session tag=$tag epoch=$epoch")
+                return@Runnable
+            }
+            plugin.updateSrcResource(tag, image)
+        }
+        // 配置解析与渲染都在渲染线程串行执行,注入同样切到渲染线程,避免位图/GL状态竞态
+        val handler = player.decoder?.renderThread?.handler
+        if (handler != null) {
+            handler.post(update)
+        } else {
+            // 渲染线程尚未创建(未开播)或已销毁:srcMap 未建立或已清空,更新为no-op
+            update.run()
+        }
+    }
+
+    /** 递增并返回动态图加载会话代数号(每次 load(dynamic=...) 调用) */
+    internal fun nextDynamicLoadEpoch(): Int = dynamicLoadEpoch.incrementAndGet()
 
     override fun setOnResourceClickListener(resourceClickListener: OnResourceClickListener?) {
         player.pluginManager.getMixAnimPlugin()?.resourceClickListener = resourceClickListener
@@ -564,6 +610,8 @@ open class AnimView @JvmOverloads constructor(
         setFetchResource(null)
         loadJob?.cancel("release")
         loadJob = null
+        dynamicDownloadJob?.cancel("release")
+        dynamicDownloadJob = null
     }
 
     private fun ui(f: () -> Unit) {

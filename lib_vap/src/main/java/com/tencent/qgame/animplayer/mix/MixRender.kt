@@ -17,6 +17,7 @@ package com.tencent.qgame.animplayer.mix
 
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import android.opengl.GLUtils
 import com.tencent.qgame.animplayer.AnimConfig
 import com.tencent.qgame.animplayer.Constant
 import com.tencent.qgame.animplayer.PointRect
@@ -168,6 +169,24 @@ class MixRender(private val mixAnimPlugin: MixAnimPlugin) {
         array[6] = u1
         array[7] = 1f
         return array
+    }
+
+    /**
+     * 运行中重传src纹理(动态图异步注入,见 MixAnimPlugin.updateSrcResource)。
+     * 须在渲染线程调用。复用既有纹理id重新上传,texImage2D会按新位图尺寸重新分配存储,
+     * 无需删除重建;纹理尚未创建(id==0)时跳过,init()创建时自然使用最新src.bitmap。
+     */
+    fun updateSrcTexture(src: Src) {
+        val bitmap = src.bitmap ?: return
+        if (src.srcTextureId == 0) {
+            ALog.i(TAG, "updateSrcTexture skip, texture not created, srcId=${src.srcId}")
+            return
+        }
+        ALog.i(TAG, "updateSrcTexture srcId=${src.srcId} size=${bitmap.width}x${bitmap.height}")
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, src.srcTextureId)
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
     }
 
     fun release(textureId: Int) {

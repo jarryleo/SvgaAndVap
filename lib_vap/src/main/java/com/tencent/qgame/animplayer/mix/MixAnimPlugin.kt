@@ -23,6 +23,7 @@ import android.view.MotionEvent
 import com.tencent.qgame.animplayer.AnimConfig
 import com.tencent.qgame.animplayer.AnimPlayer
 import com.tencent.qgame.animplayer.Constant
+import com.tencent.qgame.animplayer.anim.AnimImage
 import com.tencent.qgame.animplayer.inter.IFetchResource
 import com.tencent.qgame.animplayer.inter.OnResourceClickListener
 import com.tencent.qgame.animplayer.plugin.IAnimPlugin
@@ -232,6 +233,48 @@ class MixAnimPlugin(val player: AnimPlayer): IAnimPlugin {
             }
         }
         ALog.i(TAG, "fetchResourceSync cost=${SystemClock.elapsedRealtime() - time}ms")
+    }
+
+    /**
+     * 运行中更新动态图资源(如网络动态图异步下载完成后注入)。
+     * 须在渲染线程调用(纹理操作依赖GL上下文,且与渲染循环串行化)。
+     *
+     * @param tag 动态元素 srcTag
+     * @param image [Bitmap] 或动图 [AnimImage];其余类型忽略
+     */
+    fun updateSrcResource(tag: String, image: Any?) {
+        if (player.configManager.config?.isMix != true) return
+        val src = srcMap?.map?.values?.firstOrNull {
+            it.srcType == Src.SrcType.IMG && it.srcTag == tag
+        } ?: run {
+            // 解析未完成(随后fetch会同步命中下载缓存)或会话已销毁
+            ALog.i(TAG, "updateSrcResource src not found, tag=$tag")
+            return
+        }
+        when (image) {
+            is AnimImage -> {
+                ALog.i(TAG, "updateSrcResource anim image tag=$tag frames=${image.frameCount}")
+                // 替换已注入的动图时释放旧图集
+                if (src.animImage != null && src.animImage !== image) {
+                    src.animImage?.release()
+                }
+                src.animImage = image
+                src.bitmap = image.atlas
+            }
+
+            is Bitmap -> {
+                ALog.i(TAG, "updateSrcResource bitmap tag=$tag size=${image.width}x${image.height}")
+                if (src.animImage != null) {
+                    src.animImage?.release()
+                    src.animImage = null
+                }
+                src.bitmap = image
+            }
+
+            else -> return
+        }
+        // bitmap setter 已重算drawWidth/drawHeight(纹理坐标随之正确),此处只需重传纹理
+        mixRender?.updateSrcTexture(src)
     }
 
     private fun forceStopLockThread() {

@@ -132,7 +132,9 @@ animView.load(
 
 - **gif auto-detection**: gif images are decoded frame by frame and played in sync with the video clock.
 - Images are decoded & scaled to the slot size; remote images are disk-cached.
+- **Remote images never block playback**: urls in `setImage` download asynchronously — the animation starts right away (transparent placeholder until ready) and the image is injected into the running animation once downloaded (gifs too; applies across loops). Cached images or replays resolve synchronously, so the first frame is already correct.
 - Fused elements of mix-mode (vapx) animations are filled through `dynamic` as well.
+- You can also update an image slot during playback via `animView.updateDynamicImage(tag, bitmap)` (works with gif `AnimImage` too).
 
 ### Playback listeners
 
@@ -259,7 +261,7 @@ A complete example (source switching + download progress + dynamic elements + pl
 
 1. **Gifts / full-screen effects**: use `loopCount = 1` — the player destroys itself after finishing; advance your flow in `onAnimEnd` (e.g. remove the view).
 2. **Pre-download remote animations**: gift animations are sensitive to first-frame latency. Warm the disk cache (any downloader) when entering the room; `load()` with the same url hits the cache directly.
-3. **Use urls for dynamic images like avatars**: `setImage` with a url is disk-cached — no need to pre-download and convert to Bitmap yourself.
+3. **Use urls for dynamic images like avatars**: `setImage` with a url is disk-cached and never blocks playback (play first, inject on arrival) — no need to pre-download and convert to Bitmap yourself.
 4. **Performance**: VAP uses hardware decoding + GL rendering with low CPU cost; but multiple concurrent VAP views mean multiple decoder instances — keep 1–2 full-screen animations on screen at most.
 5. **H.265 compatibility**: some low-end devices don't support H.265 (error 10008); exporting everything as H.264 is the safest.
 6. **Choosing between SVGA and VAP**: lightweight UI effects (badges, progress celebrations) → SVGA; complex particle/video-quality effects → VAP. The two libraries coexist fine — depend on what you need.
