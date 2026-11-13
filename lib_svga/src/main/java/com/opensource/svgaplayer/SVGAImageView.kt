@@ -159,8 +159,8 @@ open class SVGAImageView @JvmOverloads constructor(
         config: SVGAConfig? = null,
         onError: ((SVGAImageView) -> Unit)? = null,
         keepPlaceholderOnReload: Boolean = false,
+        onDownloadState: ((DownloadStatus) -> Unit)? = null,
         dynamicBlock: (SVGADynamicEntity.() -> Unit)? = null,
-        onDownloadState: ((DownloadStatus) -> Unit)? = null
     ): SVGAImageView {
         this.visibility = View.VISIBLE
         this.dynamicBlock = dynamicBlock
