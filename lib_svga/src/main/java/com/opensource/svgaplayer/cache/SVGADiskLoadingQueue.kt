@@ -8,10 +8,11 @@ import kotlinx.coroutines.Job
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * 同 URL 并发磁盘下载的去重队列，与 [[SVGAMemoryLoadingQueue]] 互补：
- * 内存缓存关闭（默认 isCacheToMemory = false）或未命中时，磁盘下载层仍需去重，
- * 避免两个 [com.opensource.svgaplayer.download.FileDownloader] 并发写同一个 cacheFile
- * 导致内容损坏，以及其中一方取消时 FileDownloader 删除 cacheFile 让并发读者 ENOENT。
+ * 同 URL 并发磁盘加载的去重队列，与 [[SVGAMemoryLoadingQueue]] 互补：
+ * 内存缓存关闭（默认 isCacheToMemory = false）或未命中时，磁盘下载层仍需去重。
+ * 下载本身的并发写已由 FileDownloadManager 按 url+file 在途去重兜底，
+ * 本队列负责其管不到的一层：等待者的代理 Job、in-flight 覆盖完整解码（含解压）阶段、
+ * 以及加载者取消时的接管重载决策。
  *
  * 锁与 SVGAMemoryLoadingQueue.lock 共用 loadStateLock，统一协调。
  */

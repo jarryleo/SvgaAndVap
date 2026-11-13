@@ -462,7 +462,8 @@ class SVGAParser private constructor(context: Context) {
     ) {
         val svgaFile = SVGAFileCache.buildCacheFile(cacheKey)
         //二次校验：从 getCachedType 通过到真正打开文件之间，
-        //文件可能已被并发的取消/失败路径删除（FileDownloader.kt:81/86），
+        //文件可能已被并发的取消/失败路径删除（解码失败删除、clearCache、
+        //FileDownloadManager.cancelDownload(deleteFile=true) 等），
         //此时直接走下载路径而非报 parser error
         if (!svgaFile.exists()) {
             LogUtils.info(

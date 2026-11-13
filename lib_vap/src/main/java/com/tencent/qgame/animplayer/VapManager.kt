@@ -23,10 +23,11 @@ object VapManager : BitmapDownloadInterface {
     private var appContext: Context? = null
 
     /**
-     * 下载器
+     * 下载器：统一走进程级共享实例，
+     * 与 svga/bitmap 共享并发额度并按 url+file 做在途去重
      */
     val downloader by lazy {
-        FileDownloadManager()
+        FileDownloadManager.shared
     }
 
     private var bitmapDownloader: BitmapDownloadInterface = BitmapDownloader

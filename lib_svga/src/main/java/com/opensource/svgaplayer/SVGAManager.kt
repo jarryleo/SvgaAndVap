@@ -25,14 +25,14 @@ object SVGAManager {
 
     /** init 时记录，供 clearCache 后重建 http 缓存使用（避免持有外部 Context） */
     private var appContext: Context? = null
-    private var httpCacheSize: Long = 256L * 1024 * 1024
+    private var httpCacheSize: Long = 64L * 1024 * 1024
 
     @JvmOverloads
     @JvmStatic
     fun init(
         context: Context,
         memoryCacheMaxBytes: Long = SVGAMemoryCache.defaultMaxBytes,
-        httpCacheSize: Long = (256 * 1024 * 1024).toLong(),
+        httpCacheSize: Long = 64L * 1024 * 1024,
         logEnabled: Boolean = false,
         loggerProxy: ILogger? = null,
         urlDecoder: UrlDecoder? = null,

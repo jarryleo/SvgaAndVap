@@ -1,23 +1,25 @@
 package com.opensource.svgaplayer.download
 
+import cn.leo.base.download.DownloadState
 import cn.leo.base.download.FileDownloadManager
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.coroutine.SvgaCoroutineManager
 import com.opensource.svgaplayer.utils.log.LogUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
-import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
+import kotlinx.coroutines.flow.first
 import java.io.InputStream
 import java.net.URL
 
+/**
+ * [FileDownloadManager.shared] 的回调式适配层：
+ * 下载本体统一走共享下载器（并发额度、同 url+file 在途去重、取消中断网络读），
+ * 对 SVGAParser/SVGAManager 保持原有的回调 API 不变
+ */
 open class FileDownloader {
 
     companion object {
         private const val TAG = "SVGAFileDownloader"
-        private const val SIZE = 4096
     }
 
     /**
@@ -30,68 +32,58 @@ open class FileDownloader {
     open fun resume(
         url: URL, complete: (inputStream: InputStream) -> Unit, failure: (e: Exception) -> Unit = {}
     ): Job {
+        val urlString = url.toString()
+        //下载到缓存地址
+        val cacheKey = SVGAFileCache.buildCacheKey(url)
+        val cacheFile = SVGAFileCache.buildCacheFile(cacheKey)
         return SvgaCoroutineManager.launchIo {
-            //下载到缓存地址
-            val cacheKey = SVGAFileCache.buildCacheKey(url)
-            val cacheFile = SVGAFileCache.buildCacheFile(cacheKey)
-            //先写临时文件，完整下载后再发布：getCachedType 只判存在性，下载中的半成品一旦以正式
-            //名字落盘，并发的解读者会把它当完整缓存解析失败并误删；取消/失败也只清临时文件
-            val tmpFile =
-                File("${cacheFile.absolutePath}.tmp_${System.nanoTime()}_${Thread.currentThread().id}")
+            LogUtils.info(
+                TAG, "================ file download start ================ " +
+                        "\r\n url = $urlString"
+            )
             try {
-                LogUtils.info(
-                    TAG, "================ file download start ================ " +
-                            "\r\n url = $url"
-                )
-                // 走 base 共享 OkHttpClient（连接复用，HTTPS 忽略证书校验与 vap 保持一致）
-                val request = Request.Builder()
-                    .url(url)
-                    .build()
-                FileDownloadManager.okHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        throw Exception("HTTP ${response.code}: ${response.message}")
+                //StateFlow 不会正常结束，用 first 只等首个终态后返回，包装 Job 才能按期完成，
+                //SVGADiskLoadingQueue 的 in-flight 移交（下载完成→解码协程注册）依赖这一点
+                val status = FileDownloadManager.shared.download(urlString, cacheFile)
+                    .first {
+                        it.state != DownloadState.QUEUED && it.state != DownloadState.DOWNLOADING
                     }
-                    val body = response.body ?: throw Exception("Response body is null")
-                    FileOutputStream(tmpFile).use { output ->
-                        body.byteStream().use { inputStream ->
-                            val buffer = ByteArray(SIZE)
-                            var count: Int
-                            while (isActive) {
-                                count = inputStream.read(buffer, 0, SIZE)
-                                if (count == -1) {
-                                    break
-                                }
-                                output.write(buffer, 0, count)
-                            }
-                        }
+                when {
+                    status.isSuccessful() -> {
+                        LogUtils.info(
+                            TAG, "================ file download success ================"
+                        )
+                        complete((status.file ?: cacheFile).inputStream())
+                    }
+
+                    status.state == DownloadState.CANCELLED -> {
+                        LogUtils.info(
+                            TAG, "================ file download cancel ================"
+                        )
+                        //manager 侧被外部 cancelDownload：包装 Job 也必须以取消态结束，
+                        //SVGAParser 注册的 invokeOnCompletion 才会走等待者接管分支
+                        failure(CancellationException("download cancel"))
+                        throw CancellationException("download cancel")
+                    }
+
+                    else -> {
+                        val e = status.exception ?: Exception("download failed")
+                        LogUtils.error(TAG, "================ file download fail ================")
+                        LogUtils.error(TAG, "error: ${e.message}")
+                        failure(e)
                     }
                 }
-                if (isActive) {
-                    LogUtils.info(
-                        TAG, "================ file download success ================"
-                    )
-                    if (cacheFile.exists()) {
-                        cacheFile.delete()
-                    }
-                    if (!tmpFile.renameTo(cacheFile)) {
-                        //rename 失败（目标被并发占用等）时退化为拷贝发布
-                        tmpFile.copyTo(cacheFile, overwrite = true)
-                        tmpFile.delete()
-                    }
-                    complete(cacheFile.inputStream())
-                } else {
-                    LogUtils.info(
-                        TAG, "================ file download cancel ================"
-                    )
-                    tmpFile.delete()
-                    failure(CancellationException("download cancel"))
+            } catch (e: CancellationException) {
+                //自身被取消（view 回收等）：原样上抛，由 invokeOnCompletion 统一决策接管
+                throw e
+            }
+        }.apply {
+            invokeOnCompletion { cause ->
+                if (cause is CancellationException) {
+                    //包装任务取消 → 停掉 manager 侧下载（不删正式缓存文件：
+                    //取消时最多存在 shadow 半成品，由 manager 任务自身的异常清理删除）
+                    FileDownloadManager.shared.cancelDownload(urlString, cacheFile, deleteFile = false)
                 }
-            } catch (e: Exception) {
-                tmpFile.delete()
-                LogUtils.error(TAG, "================ file download fail ================")
-                LogUtils.error(TAG, "error: ${e.message}")
-                e.printStackTrace()
-                failure(e)
             }
         }
     }

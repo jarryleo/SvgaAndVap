@@ -16,15 +16,15 @@ object BitmapSourceCache {
     private var cacheDir: File? = null
 
     /**
-     * 初始化缓存目录
-     * 未初始化时 [cacheFile] 返回 null, BitmapUrlDecoder 退化为直接解码网络流
+     * 初始化缓存目录（BaseInitProvider 进程启动时已自动调用，重复调用无副作用；
+     * 未初始化时 [cacheFile] 返回 null，调用方放弃解码）。
+     * 只记录路径不做磁盘 IO——Provider 的 onCreate 跑在主线程启动期，
+     * 目录创建延迟到首次写入：FileDownloadManager 发布文件前会 mkdirs 父目录（IO 线程）
      */
     @Synchronized
     fun init(context: Context) {
         if (cacheDir == null) {
-            cacheDir = File(context.cacheDir, DIR_NAME).apply {
-                if (!exists()) mkdirs()
-            }
+            cacheDir = File(context.cacheDir, DIR_NAME)
         }
     }
 

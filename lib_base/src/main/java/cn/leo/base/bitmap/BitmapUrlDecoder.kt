@@ -6,51 +6,42 @@ import android.graphics.ImageDecoder
 import android.os.Build
 import androidx.annotation.RequiresApi
 import cn.leo.base.cache.BitmapSourceCache
+import cn.leo.base.download.DownloadException
+import cn.leo.base.download.DownloadState
 import cn.leo.base.download.FileDownloadManager
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import cn.leo.base.log.BaseLog
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.io.FileOutputStream
 import java.net.URL
 
 /**
  * 通过Url解码 Bitmap
  *
- * 解码前先参照 FileDownloader 将源文件下载到 [BitmapSourceCache] 磁盘缓存,
- * 再以文件流方式解码: 大文件不会整体读入内存, 命中缓存也无需重复下载;
- * 缓存目录未初始化(未经 BitmapDownloader 走过一遍)时退化为直接解码网络流
+ * 解码前先经 [FileDownloadManager.shared] 将源文件下载到 [BitmapSourceCache] 磁盘缓存
+ * (在途去重与并发额度与其他模块统一), 再以文件流方式解码:
+ * 大文件不会整体读入内存, 命中缓存也无需重复下载。
+ * 缓存目录由 BaseInitProvider 进程启动时自动初始化；
+ * 若宿主移除了自动初始化且从未手动 init，则放弃解码而不是自建网络流下载
  */
 object BitmapUrlDecoder : BitmapDecoder<URL>() {
-    private const val SIZE = 8192
-    private val okHttpClient: OkHttpClient by lazy {
-        FileDownloadManager.okHttpClient
-    }
+    private const val TAG = "BitmapUrlDecoder"
 
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreateSource(data: URL): ImageDecoder.Source? =
         resolveCacheFile(data)?.let { ImageDecoder.createSource(it) }
 
     override fun onDecode(data: URL, ops: BitmapFactory.Options): Bitmap? {
-        // 优先从磁盘缓存文件解码, 避免重复下载
-        resolveCacheFile(data)?.let { file ->
-            return runCatching {
-                file.inputStream().use { BitmapFactory.decodeStream(it, null, ops) }
-            }.getOrNull()
+        // 缓存目录不可用（自动初始化被移除且从未手动 init）：放弃解码，
+        // 不再退化为自建网络流下载——那会绕开统一下载链路且同一图解码两遍要下两次
+        val file = resolveCacheFile(data)
+        if (file == null) {
+            BaseLog.e(TAG, "source cache dir unavailable, skip decode: $data")
+            return null
         }
-        // 无缓存目录时退化为直接解码网络流
-        return try {
-            val request = Request.Builder()
-                .url(data)
-                .build()
-            okHttpClient.newCall(request).execute().use { response ->
-                response.body?.byteStream()?.use { stream ->
-                    BitmapFactory.decodeStream(stream, null, ops)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+        return runCatching {
+            file.inputStream().use { BitmapFactory.decodeStream(it, null, ops) }
+        }.getOrNull()
     }
 
     /**
@@ -66,43 +57,19 @@ object BitmapUrlDecoder : BitmapDecoder<URL>() {
     }
 
     /**
-     * 先写临时文件, 完整下载后原子发布:
-     * 避免并发解码读到半成品文件, 失败也只清临时文件
+     * 统一走 FileDownloadManager：同 url+file 的在途下载直接复用（并发解码不再重复下载），
+     * 临时文件与原子发布由下载器负责。本方法是同步解码路径（onDecode 内调用），
+     * 以 runBlocking 桥接，阻塞时长与旧的自建 OkHttp 下载一致（受 callTimeout 约束）
      */
     private fun downloadToFile(url: URL, cacheFile: File) {
-        val tmpFile = File("${cacheFile.absolutePath}.tmp_${System.nanoTime()}_${Thread.currentThread().id}")
-        try {
-            val request = Request.Builder()
-                .url(url)
-                .build()
-            okHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: ${response.message}")
-                }
-                val body = response.body ?: throw Exception("Response body is null")
-                tmpFile.parentFile?.takeIf { !it.exists() }?.mkdirs()
-                FileOutputStream(tmpFile).use { output ->
-                    body.byteStream().use { input ->
-                        val buffer = ByteArray(SIZE)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count == -1) break
-                            output.write(buffer, 0, count)
-                        }
-                    }
-                }
-            }
-            if (cacheFile.exists()) {
-                cacheFile.delete()
-            }
-            if (!tmpFile.renameTo(cacheFile)) {
-                // rename 失败（目标被并发占用等）时退化为拷贝发布
-                tmpFile.copyTo(cacheFile, overwrite = true)
-                tmpFile.delete()
-            }
-        } catch (e: Exception) {
-            tmpFile.delete()
-            throw e
+        val status = runBlocking {
+            FileDownloadManager.shared.download(url.toString(), cacheFile)
+                .first { it.isSuccessful() || it.isFailed() || it.state == DownloadState.CANCELLED }
+        }
+        if (!status.isSuccessful()) {
+            throw DownloadException(
+                "download fail: ${status.exception?.message}", status.exception
+            )
         }
     }
 }
