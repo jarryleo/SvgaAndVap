@@ -41,9 +41,9 @@ dependencies {
     //implementation(project(":lib_svga"))
     //implementation(project(":lib_vap"))
 
-    implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.0")
-    implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.0")
-    implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.0")
+    //implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.0")
+    //implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.0")
+    implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.1")
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
