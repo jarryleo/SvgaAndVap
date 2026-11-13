@@ -15,40 +15,51 @@
  */
 package com.tencent.qgame.animplayer.util
 
-object ALog {
+import cn.leo.base.log.BaseLog
+import cn.leo.base.log.ILogger
 
-    var isDebug = false
+object ALog : ILogger {
 
-    var log: IALog? = null
+    var isLogEnable = false
 
-    fun i(tag: String, msg: String) {
-        log?.i(tag, msg)
+    var log: ILogger? = BaseLog
+
+    override fun v(tag: String, msg: String) {
+        if (isLogEnable) {
+            log?.v(tag, msg)
+        }
     }
 
-    fun d(tag: String, msg: String) {
-        if (isDebug) {
+    override fun i(tag: String, msg: String) {
+        if (isLogEnable) {
+            log?.i(tag, msg)
+        }
+    }
+
+    override fun d(tag: String, msg: String) {
+        if (isLogEnable) {
             log?.d(tag, msg)
         }
     }
 
-    fun e(tag: String, msg: String) {
-        log?.e(tag, msg)
+    override fun w(tag: String, msg: String) {
+        if (isLogEnable) {
+            log?.w(tag, msg)
+        }
     }
 
-    fun e(tag: String, msg: String, tr: Throwable) {
-        log?.e(tag, msg, tr)
+    override fun e(tag: String, msg: String) {
+        if (isLogEnable) {
+            log?.e(tag, msg)
+        }
+    }
+
+    override fun e(tag: String, msg: String, tr: Throwable) {
+        if (isLogEnable) {
+            log?.e(tag, msg, tr)
+        }
     }
 }
 
-
-interface IALog {
-    fun i(tag: String, msg: String) {}
-
-    fun d(tag: String, msg: String) {}
-
-    fun e(tag: String, msg: String) {}
-
-    fun e(tag: String, msg: String, tr: Throwable) {}
-}
 
 

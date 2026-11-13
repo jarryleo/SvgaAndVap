@@ -31,8 +31,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // 初始化两个库的缓存目录(幂等), 保证"清除缓存"在未播放过网络动画时也能清到文件缓存
-        SVGAManager.init(applicationContext)
-        VapManager.init(applicationContext)
+        SVGAManager.init(applicationContext, logEnabled = true)
+        VapManager.init(applicationContext, logEnabled = true)
         setContent {
             SvgaAndVapTheme {
                 HomeScreen(

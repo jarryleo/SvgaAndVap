@@ -8,7 +8,10 @@ import cn.leo.base.download.BitmapDownloadInterface
 import cn.leo.base.download.BitmapDownloader
 import cn.leo.base.download.DownloadStatus
 import cn.leo.base.download.FileDownloadManager
+import cn.leo.base.log.BaseLog
+import cn.leo.base.log.ILogger
 import com.tencent.qgame.animplayer.cache.VapFileCache
+import com.tencent.qgame.animplayer.util.ALog
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
@@ -35,9 +38,17 @@ object VapManager : BitmapDownloadInterface {
     /**
      * 初始化，不初始也能用，就是第一个vap没有缓存
      */
-    fun init(context: Context) {
+    fun init(
+        context: Context,
+        logEnabled: Boolean = false,
+        loggerProxy: ILogger? = BaseLog,
+    ) {
         appContext = context.applicationContext
         VapFileCache.init(context)
+        ALog.isLogEnable = logEnabled
+        if (loggerProxy != null) {
+            ALog.log = loggerProxy
+        }
     }
 
     /**

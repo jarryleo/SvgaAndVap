@@ -10,48 +10,48 @@ internal object LogUtils {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.verbose(tag, msg)
+        SVGALogger.getSVGALogger()?.v(tag, msg)
     }
 
     fun info(tag: String = TAG, msg: String) {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.info(tag, msg)
+        SVGALogger.getSVGALogger()?.i(tag, msg)
     }
 
     fun debug(tag: String = TAG, msg: String) {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.debug(tag, msg)
+        SVGALogger.getSVGALogger()?.d(tag, msg)
     }
 
     fun warn(tag: String = TAG, msg: String) {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.warn(tag, msg)
+        SVGALogger.getSVGALogger()?.w(tag, msg)
     }
 
     fun error(tag: String = TAG, msg: String) {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.error(tag, msg, null)
+        SVGALogger.getSVGALogger()?.e(tag, msg)
     }
 
     fun error(tag: String, error: Throwable) {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.error(tag, error.message, error)
+        SVGALogger.getSVGALogger()?.e(tag, error.message.toString(), error)
     }
 
     fun error(tag: String = TAG, msg: String, error: Throwable) {
         if (!SVGALogger.isLogEnabled()) {
             return
         }
-        SVGALogger.getSVGALogger()?.error(tag, msg, error)
+        SVGALogger.getSVGALogger()?.e(tag, msg, error)
     }
 }

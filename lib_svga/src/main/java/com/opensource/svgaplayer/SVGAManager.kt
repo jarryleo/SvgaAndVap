@@ -4,12 +4,12 @@ import android.content.Context
 import android.net.http.HttpResponseCache
 import cn.leo.base.cache.BitmapCache
 import cn.leo.base.cache.BitmapDiskCache
+import cn.leo.base.log.ILogger
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.cache.SVGAMemoryCache
 import com.opensource.svgaplayer.download.FileDownloader
 import com.opensource.svgaplayer.url.UrlDecoder
 import com.opensource.svgaplayer.url.UrlDecoderManager
-import com.opensource.svgaplayer.utils.log.ILogger
 import com.opensource.svgaplayer.utils.log.SVGALogger
 import java.io.File
 import java.net.URL

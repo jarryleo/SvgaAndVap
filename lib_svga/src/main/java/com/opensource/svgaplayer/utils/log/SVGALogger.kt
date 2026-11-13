@@ -1,11 +1,14 @@
 package com.opensource.svgaplayer.utils.log
 
+import cn.leo.base.log.BaseLog
+import cn.leo.base.log.ILogger
+
 /**
  * SVGA logger 配置管理
  **/
 object SVGALogger {
 
-    private var mLogger: ILogger? = DefaultLogCat()
+    private var mLogger: ILogger? = BaseLog
     private var isLogEnabled = false
 
     /**
