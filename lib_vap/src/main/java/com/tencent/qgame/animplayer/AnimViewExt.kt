@@ -88,7 +88,7 @@ fun AnimView.load(
 /**
  * 加载VAP动画
  * @param data 动画数据源, 可以是文件，url，asset
- * @param loopCount 循环次数，小于1为播放1次。
+ * @param loopCount 循环次数，默认1次，负数为无限循环
  * @param onStartRenderOnce 动画开始渲染一次的回调
  * @param dynamicImage 动态图片, 返回Bitmap或AnimImage(gif动图)
  * @param dynamicText 动态文字
@@ -103,8 +103,11 @@ fun AnimView.load(
     dynamicText: (resource: Resource) -> String? = { null },
     onRelease: (resource: List<Resource>) -> Unit = {}
 ) {
-    loopCount?.let {
-        setLoop(it.coerceAtLeast(1))
+    val loop = loopCount ?: 1
+    if (loop < 0) {
+        setLoop(Int.MAX_VALUE)
+    } else {
+        setLoop(loop)
     }
     setFetchResource(object : IFetchResource {
         override fun fetchImage(
