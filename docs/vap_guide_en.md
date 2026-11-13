@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 }
 
 // build.gradle.kts — VAP only; lib_base is pulled in transitively
-implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.2")
 ```
 
 Replace the version with the latest [Release tag](https://github.com/jarryleo/SvgaAndVap/tags).
@@ -201,7 +201,7 @@ animView.enableVersion1(true)           // legacy mp4 compat (deprecated; only f
 Switch the dependency to:
 
 ```kotlin
-implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.2")
 // transitively includes lib_svga / lib_vap / lib_base
 ```
 
@@ -209,8 +209,8 @@ implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.1")
 
 ```kotlin
 import cn.leo.base.download.DownloadState
-import cn.leo.lib_anim_compose.VapPlayer
-import cn.leo.lib_anim_compose.rememberVapPlayerState
+import cn.leo.lib_compose.VapPlayer
+import cn.leo.lib_compose.rememberVapPlayerState
 import com.tencent.qgame.animplayer.DynamicResource
 import com.tencent.qgame.animplayer.util.ScaleType
 

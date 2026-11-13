@@ -34,7 +34,7 @@ dependencyResolutionManagement {
 }
 
 // build.gradle.kts — SVGA only; lib_base is pulled in transitively
-implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.2")
 ```
 
 Replace the version with the latest [Release tag](https://github.com/jarryleo/SvgaAndVap/tags).
@@ -233,15 +233,15 @@ svgaView.setOnAnimKeyClickListener(object : SVGAClickAreaListener {
 Switch the dependency to:
 
 ```kotlin
-implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.2")
 // transitively includes lib_svga / lib_vap / lib_base
 ```
 
 ### Basic usage
 
 ```kotlin
-import cn.leo.lib_anim_compose.SvgaPlayer
-import cn.leo.lib_anim_compose.rememberSvgaPlayerState
+import cn.leo.lib_compose.SvgaPlayer
+import cn.leo.lib_compose.rememberSvgaPlayerState
 import com.opensource.svgaplayer.SVGAConfig
 import com.opensource.svgaplayer.SVGAImageView
 

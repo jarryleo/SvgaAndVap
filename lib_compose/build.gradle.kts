@@ -5,9 +5,9 @@ plugins {
 }
 
 android {
-    namespace = "cn.leo.lib_anim_compose"
+    namespace = "cn.leo.lib_compose"
     compileSdk {
-        version = release(37)
+        version = release(36)
     }
 
     defaultConfig {

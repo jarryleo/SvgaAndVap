@@ -4,6 +4,6 @@ jdk:
   - openjdk17
 
 # 明确使用 publishToMavenLocal 发布所有配置了 maven-publish 的模块
-# （lib_base / lib_svga / lib_vap / lib_anim_compose，app 模块不发布）
+# （lib_base / lib_svga / lib_vap / lib_compose，app 模块不发布）
 install:
   - ./gradlew publishToMavenLocal

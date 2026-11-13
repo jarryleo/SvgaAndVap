@@ -1,4 +1,4 @@
-package cn.leo.lib_anim_compose
+package cn.leo.lib_compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.NonRestartableComposable

@@ -31,9 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import cn.leo.base.download.DownloadState
-import cn.leo.lib_anim_compose.VapConfig
-import cn.leo.lib_anim_compose.VapPlayer
-import cn.leo.lib_anim_compose.rememberVapPlayerState
+import cn.leo.lib_compose.VapConfig
+import cn.leo.lib_compose.VapPlayer
+import cn.leo.lib_compose.rememberVapPlayerState
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
 import com.tencent.qgame.animplayer.DynamicResource
 

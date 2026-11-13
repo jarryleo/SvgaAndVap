@@ -19,7 +19,7 @@
 | --- | --- |
 | `lib_svga` | SVGA 动画播放（View 体系） |
 | `lib_vap` | VAP 动画播放（View 体系） |
-| `lib_anim_compose` | Compose 封装版（传递依赖 `lib_svga` / `lib_vap`，自动包含全部能力） |
+| `lib_compose` | Compose 封装版（传递依赖 `lib_svga` / `lib_vap`，自动包含全部能力） |
 
 **1. 在 `settings.gradle.kts` 中添加 JitPack 仓库：**
 
@@ -37,15 +37,15 @@ dependencyResolutionManagement {
 
 ```kotlin
 // 只要 SVGA
-implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.2")
 
 // 只要 VAP
-implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.2")
 
 // SVGA + VAP 都要
-implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.1")
-implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.2")
+implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.2")
 
 // Compose 版（自动包含 lib_svga + lib_vap）
-implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.2")
 ```

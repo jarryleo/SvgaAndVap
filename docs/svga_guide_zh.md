@@ -34,7 +34,7 @@ dependencyResolutionManagement {
 }
 
 // build.gradle.kts —— 只用 SVGA，只需这一行（lib_base 会自动传递引入）
-implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.2")
 ```
 
 版本号请替换为最新的 [Release tag](https://github.com/jarryleo/SvgaAndVap/tags)。
@@ -233,15 +233,15 @@ svgaView.setOnAnimKeyClickListener(object : SVGAClickAreaListener {
 依赖改为：
 
 ```kotlin
-implementation("com.github.jarryleo.SvgaAndVap:lib_anim_compose:1.0.1")
+implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.2")
 // 会自动传递引入 lib_svga / lib_vap / lib_base，无需重复声明
 ```
 
 ### Compose 基础用法
 
 ```kotlin
-import cn.leo.lib_anim_compose.SvgaPlayer
-import cn.leo.lib_anim_compose.rememberSvgaPlayerState
+import cn.leo.lib_compose.SvgaPlayer
+import cn.leo.lib_compose.rememberSvgaPlayerState
 import com.opensource.svgaplayer.SVGAConfig
 import com.opensource.svgaplayer.SVGAImageView
 
