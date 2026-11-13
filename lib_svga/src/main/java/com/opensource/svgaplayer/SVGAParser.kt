@@ -12,6 +12,8 @@ import com.opensource.svgaplayer.cache.SVGAMemoryLoadingQueue
 import com.opensource.svgaplayer.coroutine.SvgaCoroutineManager
 import com.opensource.svgaplayer.download.FileDownloader
 import com.opensource.svgaplayer.proto.MovieEntity
+import cn.leo.base.download.DownloadState
+import cn.leo.base.download.DownloadStatus
 import com.opensource.svgaplayer.utils.log.LogUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -99,7 +101,7 @@ class SVGAParser private constructor(context: Context) {
         //加载内存缓存数据
         val memoryCacheKey: String? =
             if (config.isCacheToMemory) SVGAMemoryCache.createKey(path, config) else null
-        if (decodeFromMemoryCacheKey(memoryCacheKey, config, callback, playCallback, path)) {
+        if (decodeFromMemoryCacheKey(memoryCacheKey, config, callback, playCallback, path) != MemoryCacheResult.MISS) {
             return null
         }
         //加载文件数据
@@ -200,7 +202,7 @@ class SVGAParser private constructor(context: Context) {
             TAG,
             "================ decode $name from assets memoryCacheKey = $memoryCacheKey ================"
         )
-        if (decodeFromMemoryCacheKey(memoryCacheKey, config, callback, playCallback, name)) {
+        if (decodeFromMemoryCacheKey(memoryCacheKey, config, callback, playCallback, name) != MemoryCacheResult.MISS) {
             return null
         }
         //加载Assets数据
@@ -268,7 +270,8 @@ class SVGAParser private constructor(context: Context) {
         url: URL,
         config: SVGAConfig,
         callback: ParseCompletion?,
-        playCallback: PlayCallback? = null
+        playCallback: PlayCallback? = null,
+        downloadState: ((DownloadStatus) -> Unit)? = null
     ): Job? {
         if (mContext == null) {
             LogUtils.error(TAG, "在配置 SVGAParser context 前, 无法解析 SVGA 文件。")
@@ -279,16 +282,34 @@ class SVGAParser private constructor(context: Context) {
         //加载内存缓存数据
         val memoryCacheKey: String? =
             if (config.isCacheToMemory) SVGAMemoryCache.createKey(urlPath, config) else null
-        if (decodeFromMemoryCacheKey(memoryCacheKey, config, callback, playCallback, urlPath)) {
-            return null
+        when (decodeFromMemoryCacheKey(memoryCacheKey, config, callback, playCallback, urlPath)) {
+            MemoryCacheResult.HIT -> {
+                //内存缓存命中无需下载：与 vap 缓存命中语义对齐，直接回调完成终态
+                dispatchDownloadState(
+                    cacheKey = null,
+                    direct = downloadState,
+                    status = completedStatus(urlPath)
+                )
+                return null
+            }
+
+            MemoryCacheResult.JOINED -> {
+                //同 key 在途加载的内存等待者：下载是否进行中未知，不误发完成终态，
+                //完成后经内存队列统一通知（onComplete/onError）
+                return null
+            }
+
+            MemoryCacheResult.MISS -> Unit
         }
-        return startDecodeFromURL(url, config, callback, playCallback, memoryCacheKey)
+        return startDecodeFromURL(url, config, callback, playCallback, memoryCacheKey, downloadState = downloadState)
     }
 
     /**
      * 实际执行磁盘缓存读取 / 下载解析（跳过内存缓存与等待队列，供首次加载与取消后的接管重载共用）。
      * 接管重载时 [callback] 为 null，完成后仅通知等待队列；此时 [isRestart] 为 true，
      * 用于阻止其 invokeOnCompletion 再次触发 restart 递归（避免 App 关闭/作用域级联取消时的协程级联）。
+     * [downloadState] 为本次调用的下载状态回调：等待者/接管重载传 null，
+     * 等待者的回调由加载者经 [dispatchDownloadState] 广播，接管重载的等待者仍留在磁盘队列继续接收
      */
     private fun startDecodeFromURL(
         url: URL,
@@ -296,13 +317,16 @@ class SVGAParser private constructor(context: Context) {
         callback: ParseCompletion?,
         playCallback: PlayCallback?,
         memoryCacheKey: String?,
-        isRestart: Boolean = false
+        isRestart: Boolean = false,
+        downloadState: ((DownloadStatus) -> Unit)? = null
     ): Job? {
         val urlPath = url.toString()
         val cacheKey = SVGAFileCache.buildCacheKey(url)
         //磁盘下载去重：同 URL 已有在途下载则入队等待，避免两个 FileDownloader 并发写同一 cacheFile。
         //等待者拿到的是代理 Job：取消（view 回收）只把自己移出队列，不会误杀加载者的下载
-        val (joined, proxyJob) = SVGADiskLoadingQueue.joinOrStart(cacheKey, callback, playCallback, config, memoryCacheKey)
+        val (joined, proxyJob) = SVGADiskLoadingQueue.joinOrStart(
+            cacheKey, callback, playCallback, config, memoryCacheKey, downloadState
+        )
         if (joined) {
             LogUtils.info(TAG, "disk load in flight, join as waiter: $urlPath")
             return proxyJob
@@ -310,6 +334,8 @@ class SVGAParser private constructor(context: Context) {
         val cachedType = SVGAFileCache.getCachedType(cacheKey)
         val job = if (cachedType != null) { //加载本地缓存数据
             LogUtils.info(TAG, "this url has disk cached")
+            //磁盘缓存命中无需下载：与 vap 缓存命中语义对齐，直接回调完成终态
+            dispatchDownloadState(cacheKey, downloadState, completedStatus(urlPath))
             //解码必须在本 Job 内完成：decodeFromSVGAFileCacheKey 若内部再 launchIo 后立即返回，
             //注册进磁盘队列的 Job 会毫秒级完成，批量加载同 URL 的后续 view 在 joinOrStart 判定
             //"不在途"而各自全量重解码同一文件，形成解码风暴（内存尖峰/OOM 后动画播放为空白）
@@ -359,6 +385,9 @@ class SVGAParser private constructor(context: Context) {
                 }
                 notifyQueueError(memoryCacheKey, callback)
                 this.invokeErrorCallback(e, callback, alias = urlPath)
+            }, { status ->
+                //下载进度/终态回调：直接回调与磁盘队列等待者（同 URL 并发加载的 view）一并广播
+                dispatchDownloadState(cacheKey, downloadState, status)
             })
         }
         SVGADiskLoadingQueue.registerJob(cacheKey, job)
@@ -717,6 +746,30 @@ class SVGAParser private constructor(context: Context) {
         notifyDiskWaiters(alias, null)
     }
 
+    /** 缓存命中（无需下载）时的完成状态：与 vap 缓存命中回调语义对齐 */
+    private fun completedStatus(urlPath: String): DownloadStatus {
+        return DownloadStatus(url = urlPath, state = DownloadState.COMPLETED, progress = 100)
+    }
+
+    /**
+     * 下载状态分发：直接回调与磁盘队列等待者（同 URL 并发加载、经 joinOrStart 入队的 view）
+     * 一并通知，统一投递主线程（与 onComplete/onError 及 vap 的 downloadState 行为一致）。
+     * [cacheKey] 为 null 表示无磁盘队列上下文（如内存缓存命中），只通知直接回调。
+     * 等待者快照在当前线程完成，晚于快照加入的等待者从下一个状态起接收
+     */
+    private fun dispatchDownloadState(
+        cacheKey: String?,
+        direct: ((DownloadStatus) -> Unit)?,
+        status: DownloadStatus
+    ) {
+        val waiters = cacheKey?.let { SVGADiskLoadingQueue.takeProgressListeners(it) } ?: emptyList()
+        if (direct == null && waiters.isEmpty()) return
+        handler.post {
+            direct?.invoke(status)
+            waiters.forEach { it(status) }
+        }
+    }
+
     /**
      * 通知磁盘下载队列等待者。
      * [entity] 非 null → 解析成功，通知 onComplete；null → 解析失败，通知 onError。
@@ -906,7 +959,7 @@ class SVGAParser private constructor(context: Context) {
 
     /**
      * 加载内存缓存
-     * @return true内部已将数据通过接口返回（缓存命中或已入队等待），不用再加载
+     * @return 非 [MemoryCacheResult.MISS] 表示内部已接管（缓存命中直接回调或已入队等待统一通知），不用再加载
      */
     private fun decodeFromMemoryCacheKey(
         memoryCacheKey: String?,
@@ -914,9 +967,9 @@ class SVGAParser private constructor(context: Context) {
         callback: ParseCompletion?,
         playCallback: PlayCallback?,
         alias: String?
-    ): Boolean {
+    ): MemoryCacheResult {
         if (!config.isCacheToMemory || memoryCacheKey.isNullOrEmpty()) { //不使用内存缓存
-            return false
+            return MemoryCacheResult.MISS
         }
         //“读缓存 + 入队”与完成路径的“写缓存 + 移除”使用同一把锁，原子决策：
         //要么命中缓存走直接回调，要么在完成通知发出前成功入队，杜绝两边交错的漏通知
@@ -947,9 +1000,21 @@ class SVGAParser private constructor(context: Context) {
                     this.invokeCompleteCallback(entity, callback, alias = alias)
                 }, playCallback)
             }
-            return true
+            return MemoryCacheResult.HIT
         }
-        return joinLoading
+        return if (joinLoading) MemoryCacheResult.JOINED else MemoryCacheResult.MISS
+    }
+
+    /** 内存缓存判定结果：区分命中（可直接回调下载完成终态）与入队等待（加载仍在途） */
+    private enum class MemoryCacheResult {
+        /** 未命中且无同 key 在途加载，当前调用是加载者 */
+        MISS,
+
+        /** 命中内存缓存，实体已就绪并直接回调 */
+        HIT,
+
+        /** 同 key 已有在途加载，已入队等待统一通知（此时下载可能仍在进行） */
+        JOINED
     }
 
     // 是否是 zip 文件

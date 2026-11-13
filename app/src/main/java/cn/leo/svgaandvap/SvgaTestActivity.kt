@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import cn.leo.base.download.DownloadState
 import cn.leo.lib_anim_compose.SvgaPlayer
 import cn.leo.lib_anim_compose.rememberSvgaPlayerState
 import cn.leo.svgaandvap.ui.theme.SvgaAndVapTheme
@@ -133,6 +134,18 @@ private fun SvgaTestScreen() {
                     onError = {
                         status = "load failed"
                         paused = false
+                    },
+                    onDownloadState = { download ->
+                        // url 源回调下载进度；缓存命中/本地源直接回调 COMPLETED 终态
+                        when (download.state) {
+                            DownloadState.DOWNLOADING ->
+                                status = "下载中 ${download.progress}%"
+
+                            DownloadState.FAILED ->
+                                status = "下载失败: ${download.exception?.message}"
+
+                            else -> Unit // QUEUED / COMPLETED / PAUSED / CANCELLED
+                        }
                     },
                 )
             }

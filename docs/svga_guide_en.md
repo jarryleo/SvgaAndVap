@@ -90,6 +90,8 @@ svgaView.load(
     keepPlaceholderOnReload = false,    // keep a static placeholder during reload (avoids flicker in lists)
     dynamicBlock = {                    // dynamic content, see below
         setDynamicImage("avatar", "https://example.com/avatar.png")
+    },
+    onDownloadState = { status ->       // download state callback, main thread (see below)
     }
 )
 ```
@@ -99,6 +101,21 @@ Notes:
 - If the view has no size yet (e.g. unmeasured `wrap_content`), `load()` waits for layout and then starts automatically — **call it directly in `onCreate`**, no post/delay needed.
 - Calling `load()` again with the **same source** replays without re-decoding; if `dynamicBlock` changed, dynamic content is updated in place.
 - Loading/playing run in coroutines; in-flight work is cancelled automatically on detach — no leaks.
+- `onDownloadState` callback (main thread, same semantics as VAP's `downloadState`):
+  - url sources: `QUEUED` → `DOWNLOADING` (`status.progress`: 0~100) → `COMPLETED` / `FAILED` / `CANCELLED`;
+  - disk/memory cache hit, local file, or asset: no download happens, a `COMPLETED` terminal state is delivered immediately;
+  - when multiple views load the same url concurrently, deduplicated waiters also receive progress.
+
+```kotlin
+svgaView.load(url, onDownloadState = { status ->
+    when (status.state) {
+        DownloadState.DOWNLOADING -> "downloading ${status.progress}%"  // status.progress: 0~100
+        DownloadState.COMPLETED   -> "done"                             // status.file: cache file
+        DownloadState.FAILED      -> "failed: ${status.exception?.message}"
+        else -> Unit // QUEUED / PAUSED / CANCELLED
+    }
+})
+```
 
 ### Load configuration: SVGAConfig
 
@@ -244,6 +261,7 @@ fun GiftAnimation(url: String) {
         onFrameStart = { },                  // first frame rendered (good place to hide a placeholder)
         onAnimEnd = { },                     // finished
         onError = { },                       // load failure
+        onDownloadState = { },               // download state for url sources (progress/terminal, main thread)
     )
 }
 ```
@@ -257,6 +275,7 @@ Parameters:
 | `fillMode` | Same as the View FillMode |
 | `dynamicBlock` | Dynamic content; runs only on (re)load — to change content call `state.load()` |
 | `onFrameStart` | First-frame callback; fires only on the auto-play path |
+| `onDownloadState` | Download state callback (main thread); same semantics as the View `load()` `onDownloadState` and VAP's `onDownloadState` |
 
 ### Controlling with SvgaState
 

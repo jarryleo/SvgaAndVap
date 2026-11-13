@@ -1,5 +1,6 @@
 package com.opensource.svgaplayer.cache
 
+import cn.leo.base.download.DownloadStatus
 import com.opensource.svgaplayer.SVGAConfig
 import com.opensource.svgaplayer.SVGAParser.ParseCompletion
 import com.opensource.svgaplayer.SVGAParser.PlayCallback
@@ -30,7 +31,10 @@ object SVGADiskLoadingQueue {
         /** 等待者自己的内存缓存 key：等待者可能是某内存尺寸的首个加载者（isCacheToMemory=true
          *  且缓存未命中），占位登记在 [SVGAMemoryLoadingQueue]，磁盘队列通知时必须一并消费 */
         val memoryCacheKey: String?,
-        val proxyJob: CompletableJob
+        val proxyJob: CompletableJob,
+        /** 等待者的下载状态回调：加载者收到下载进度时经 [takeProgressListeners] 广播，
+         *  与 vap 共享下载流（同 url 各调用方都能收到进度）的语义对齐 */
+        val downloadState: ((DownloadStatus) -> Unit)? = null
     )
 
     // 等待者列表：cacheKey -> List of waiters（空列表为加载者占位）
@@ -53,13 +57,16 @@ object SVGADiskLoadingQueue {
         callback: ParseCompletion?,
         playCallback: PlayCallback?,
         config: SVGAConfig,
-        memoryCacheKey: String? = null
+        memoryCacheKey: String? = null,
+        downloadState: ((DownloadStatus) -> Unit)? = null
     ): Pair<Boolean, Job?> =
         synchronized(SVGAMemoryLoadingQueue.lock) {
             val existingJob = inFlightJobs[cacheKey]
             if (existingJob != null && existingJob.isActive) {
                 val proxyJob = Job()
-                val item = SVGADiskLoadingItem(callback, playCallback, config, memoryCacheKey, proxyJob)
+                val item = SVGADiskLoadingItem(
+                    callback, playCallback, config, memoryCacheKey, proxyJob, downloadState
+                )
                 loadingMap.getOrPut(cacheKey) { mutableListOf() }.add(item)
                 //等待者主动取消（view 回收）：仅从队列摘除自己，真实下载与加载者不受影响；
                 //正常完成路径由 completeAndTake/cancelAndTakeWaiters 统一 complete 代理 Job，不会走到这里
@@ -121,5 +128,15 @@ object SVGADiskLoadingQueue {
     private fun removeWaiter(cacheKey: String, item: SVGADiskLoadingItem) =
         synchronized(SVGAMemoryLoadingQueue.lock) {
             loadingMap[cacheKey]?.remove(item)
+        }
+
+    /**
+     * 快照当前等待者的下载状态回调（进度广播用）：
+     * 只读不动队列状态，区别于完成/失败通知的 completeAndTake/cancelAndTakeWaiters。
+     * 晚于快照加入的等待者从下一个进度状态起接收，已移除的等待者至多多收一次快照内的状态
+     */
+    fun takeProgressListeners(cacheKey: String): List<(DownloadStatus) -> Unit> =
+        synchronized(SVGAMemoryLoadingQueue.lock) {
+            loadingMap[cacheKey]?.mapNotNull { it.downloadState } ?: emptyList()
         }
 }

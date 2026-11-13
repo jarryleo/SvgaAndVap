@@ -10,6 +10,8 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import android.widget.ImageView
+import cn.leo.base.download.DownloadState
+import cn.leo.base.download.DownloadStatus
 import com.opensource.svgaplayer.cache.SVGAMemoryCache
 import com.opensource.svgaplayer.url.UrlDecoderManager
 import com.opensource.svgaplayer.utils.SVGARange
@@ -23,6 +25,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.lang.ref.WeakReference
 import java.net.URL
 import java.net.URLDecoder
@@ -92,6 +95,13 @@ open class SVGAImageView @JvmOverloads constructor(
     internal var onError: ((SVGAImageView) -> Unit)? = {}
 
     /**
+     * 最近一次 load 的下载状态回调（主线程）：url 源回调 QUEUED/DOWNLOADING 进度与终态，
+     * 缓存命中与本地源（文件/asset）直接回调 COMPLETED 终态，语义与 vap 的 downloadState 一致。
+     * 存为字段供 attach/onLayout 兜底重载路径复用（同 dynamicBlock/onError）
+     */
+    internal var onDownloadState: ((DownloadStatus) -> Unit)? = null
+
+    /**
      * 内部加载协程作用域：attach 重建、detach 取消（区别于对外暴露的 CoroutineScope 委托，后者保持原行为不变）。
      * 旧实现加载协程挂在永不取消的 view 作用域上：detach 后在途 parserSource 会继续执行，
      * 重装 loadCallback 发起"复活解码"，完成的实体经 startAnimation 的 post 挂在已 detach 的 view 上
@@ -149,12 +159,14 @@ open class SVGAImageView @JvmOverloads constructor(
         config: SVGAConfig? = null,
         onError: ((SVGAImageView) -> Unit)? = null,
         keepPlaceholderOnReload: Boolean = false,
-        dynamicBlock: (SVGADynamicEntity.() -> Unit)? = null
+        dynamicBlock: (SVGADynamicEntity.() -> Unit)? = null,
+        onDownloadState: ((DownloadStatus) -> Unit)? = null
     ): SVGAImageView {
         this.visibility = View.VISIBLE
         this.dynamicBlock = dynamicBlock
         this.onError = onError
         this.keepPlaceholderOnReload = keepPlaceholderOnReload
+        this.onDownloadState = onDownloadState
         //同资源原地重播路径（isReplayDrawable 提前返回）不会经过 parserSource，
         //loops/mAutoPlay 需在此先行应用，否则仅变更 loopCount/autoPlay 的 config 会被吞掉
         var playbackConfigChanged = false
@@ -176,6 +188,8 @@ open class SVGAImageView @JvmOverloads constructor(
         if (source.isNullOrEmpty()) {
             stopAnimation()
             onError?.invoke(this)
+            //与 vap load(null) 语义对齐：空源回调失败终态，调用方进度 UI 可即时收尾
+            postDownloadState(DownloadStatus(state = DownloadState.FAILED))
             return this
         }
         //已有宽高才加载动画
@@ -241,6 +255,7 @@ open class SVGAImageView @JvmOverloads constructor(
             } catch (e: Exception) {
                 e.printStackTrace()
                 onError?.invoke(this)
+                postDownloadState(DownloadStatus(url = realUrl, state = DownloadState.FAILED))
                 return
             }
             LogUtils.info(
@@ -250,12 +265,22 @@ open class SVGAImageView @JvmOverloads constructor(
             loadJob = parser?.decodeFromURL(
                 url,
                 config = cfg ?: SVGAConfig(frameWidth = width, frameHeight = height),
-                callback
+                callback,
+                downloadState = onDownloadState
             )
         } else if (SourceUtil.isFilePath(realUrl)) {
             LogUtils.info(
                 TAG,
                 "view = ${hashCode()} load from file: $realUrl , last source: $lastSource"
+            )
+            //本地文件无下载过程：与 vap 本地源语义对齐，直接回调完成终态
+            postDownloadState(
+                DownloadStatus(
+                    url = realUrl,
+                    state = DownloadState.COMPLETED,
+                    progress = 100,
+                    file = File(realUrl)
+                )
             )
             loadJob = parser?.decodeFromFile(
                 realUrl,
@@ -267,12 +292,21 @@ open class SVGAImageView @JvmOverloads constructor(
                 TAG,
                 "view = ${hashCode()} load from assert: $realUrl , last source: $lastSource"
             )
+            //asset 无下载过程：与 vap 本地源语义对齐，直接回调完成终态
+            postDownloadState(
+                DownloadStatus(url = realUrl, state = DownloadState.COMPLETED, progress = 100)
+            )
             loadJob = parser?.decodeFromAssets(
                 realUrl,
                 config = cfg ?: SVGAConfig(frameWidth = width, frameHeight = height),
                 callback
             )
         }
+    }
+
+    /** 主线程分发下载状态回调（url 源的进度/终态由 parser 统一投递，这里只覆盖本地源/异常路径） */
+    private fun postDownloadState(status: DownloadStatus) {
+        onDownloadState?.let { callback -> post { callback(status) } }
     }
 
 

@@ -90,6 +90,8 @@ svgaView.load(
     keepPlaceholderOnReload = false,    // 重新加载期间是否保留静态占位图（列表场景防闪白）
     dynamicBlock = {                    // 动态内容，见下文
         setDynamicImage("avatar", "https://example.com/avatar.png")
+    },
+    onDownloadState = { status ->       // 下载状态回调，主线程（见下文）
     }
 )
 ```
@@ -99,6 +101,21 @@ svgaView.load(
 - View 没有宽高时（如 `wrap_content` 未测量），`load()` 会等待布局完成后自动加载，**在 `onCreate` 里直接调用即可**，不需要 post 延迟。
 - 对**同一资源**重复调用 `load()`：不会重新解码，直接重播；若传入的 `dynamicBlock` 有变化，会原地更新动态内容。
 - 加载/播放全部在协程中执行，View detach 时自动取消在途任务，不会泄漏。
+- `onDownloadState` 回调（主线程，与 VAP 的 `downloadState` 语义一致）：
+  - url 源：回调 `QUEUED` → `DOWNLOADING`（`status.progress`: 0~100）→ `COMPLETED` / `FAILED` / `CANCELLED`；
+  - 磁盘/内存缓存命中、本地文件、asset：无下载过程，直接回调 `COMPLETED` 终态；
+  - 同一 url 多个 view 并发加载时，去重等待的 view 同样收到进度。
+
+```kotlin
+svgaView.load(url, onDownloadState = { status ->
+    when (status.state) {
+        DownloadState.DOWNLOADING -> "下载中 ${status.progress}%"  // status.progress: 0~100
+        DownloadState.COMPLETED   -> "完成"                        // status.file: 缓存文件
+        DownloadState.FAILED      -> "失败: ${status.exception?.message}"
+        else -> Unit // QUEUED / PAUSED / CANCELLED
+    }
+})
+```
 
 ### 加载配置 SVGAConfig
 
@@ -244,6 +261,7 @@ fun GiftAnimation(url: String) {
         onFrameStart = { },                  // 首帧渲染完成（适合隐藏占位图）
         onAnimEnd = { },                     // 播放完成
         onError = { },                       // 加载失败
+        onDownloadState = { },               // 网络源下载状态（进度/终态，主线程）
     )
 }
 ```
@@ -257,6 +275,7 @@ fun GiftAnimation(url: String) {
 | `fillMode` | 同 View 版 FillMode |
 | `dynamicBlock` | 动态内容；仅在（重新）加载时执行，内容变化请调 `state.load()` |
 | `onFrameStart` | 首帧渲染回调，仅在自动播放路径下触发 |
+| `onDownloadState` | 下载状态回调（主线程），语义同 View 版 `load()` 的 `onDownloadState` 与 VAP 的 `onDownloadState` |
 
 ### SvgaState 控制
 

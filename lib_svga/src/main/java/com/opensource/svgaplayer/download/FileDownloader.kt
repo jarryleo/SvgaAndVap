@@ -1,6 +1,7 @@
 package com.opensource.svgaplayer.download
 
 import cn.leo.base.download.DownloadState
+import cn.leo.base.download.DownloadStatus
 import cn.leo.base.download.FileDownloadManager
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.coroutine.SvgaCoroutineManager
@@ -8,6 +9,7 @@ import com.opensource.svgaplayer.utils.log.LogUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import java.io.InputStream
 import java.net.URL
 
@@ -27,10 +29,15 @@ open class FileDownloader {
      * @param url URL
      * @param complete 完成回调
      * @param failure 失败回调
+     * @param onDownloadState 下载状态回调（含 QUEUED/DOWNLOADING 进度与终态），
+     * 在调用方协程（IO）上回调，主线程切换由上层负责；与 vap 的 downloadState 语义对齐
      * @return 协程 job ，可取消下载任务
      */
     open fun resume(
-        url: URL, complete: (inputStream: InputStream) -> Unit, failure: (e: Exception) -> Unit = {}
+        url: URL,
+        complete: (inputStream: InputStream) -> Unit,
+        failure: (e: Exception) -> Unit = {},
+        onDownloadState: ((DownloadStatus) -> Unit)? = null
     ): Job {
         val urlString = url.toString()
         //下载到缓存地址
@@ -45,6 +52,10 @@ open class FileDownloader {
                 //StateFlow 不会正常结束，用 first 只等首个终态后返回，包装 Job 才能按期完成，
                 //SVGADiskLoadingQueue 的 in-flight 移交（下载完成→解码协程注册）依赖这一点
                 val status = FileDownloadManager.shared.download(urlString, cacheFile)
+                    .onEach { status ->
+                        //转发含进度与终态的全部状态，供上层做下载进度回调（终态仍由下方统一处理）
+                        onDownloadState?.invoke(status)
+                    }
                     .first {
                         it.state != DownloadState.QUEUED && it.state != DownloadState.DOWNLOADING
                     }

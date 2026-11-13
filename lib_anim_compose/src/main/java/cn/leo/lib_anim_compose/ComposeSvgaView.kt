@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import cn.leo.base.download.DownloadStatus
 import com.opensource.svgaplayer.SVGACallback
 import com.opensource.svgaplayer.SVGAConfig
 import com.opensource.svgaplayer.SVGADynamicEntity
@@ -21,6 +22,7 @@ import com.opensource.svgaplayer.SVGAImageView
 class SvgaController internal constructor(
     internal val view: SVGAImageView,
     private val onError: () -> Unit,
+    private val onDownloadState: (DownloadStatus) -> Unit,
 ) {
 
     /** 是否正在播放（非 Compose 状态，值变化不触发重组，仅用于命令式查询） */
@@ -33,7 +35,13 @@ class SvgaController internal constructor(
         config: SVGAConfig? = null,
         dynamicBlock: (SVGADynamicEntity.() -> Unit)? = null,
     ) {
-        view.load(url, config, onError = { onError() }, dynamicBlock = dynamicBlock)
+        view.load(
+            url,
+            config,
+            onError = { onError() },
+            dynamicBlock = dynamicBlock,
+            onDownloadState = onDownloadState,
+        )
     }
 
     /** 清理动画资源（含 drawable 与在途加载） */
@@ -143,6 +151,8 @@ fun rememberSvgaPlayerState(initialConfig: SVGAConfig? = null): SvgaState =
  * @param dynamicBlock 仅在（重新）加载时执行，只修改它不会触发重载；
  *        动态内容变化请调用 [SvgaState.load]（同一资源时库会原地更新 dynamicItem）
  * @param onFrameStart 首帧渲染回调，仅在播放（autoPlay）路径下触发
+ * @param onDownloadState 网络源下载状态回调（url 源含进度；缓存命中/本地源直接回调终态），
+ *        语义与 [VapPlayer] 的 onDownloadState 一致
  */
 @Composable
 fun SvgaPlayer(
@@ -155,6 +165,7 @@ fun SvgaPlayer(
     onFrameStart: () -> Unit = {},
     onAnimEnd: () -> Unit = {},
     onError: () -> Unit = {},
+    onDownloadState: (DownloadStatus) -> Unit = {},
 ) {
     //factory/update 中安装的引用只创建一次，rememberUpdatedState 保证调用时读到最新 lambda，
     //避免 stale capture（调用方 lambda 捕获了后续变化的状态时尤为明显）
@@ -162,6 +173,7 @@ fun SvgaPlayer(
     val currentOnFrameStart by rememberUpdatedState(onFrameStart)
     val currentOnAnimEnd by rememberUpdatedState(onAnimEnd)
     val currentOnError by rememberUpdatedState(onError)
+    val currentOnDownloadState by rememberUpdatedState(onDownloadState)
     val currentDynamicBlock by rememberUpdatedState(dynamicBlock)
 
     //组合期读取：config 变化 → 本组件重组 → update 检测到差异后重新加载
@@ -188,7 +200,13 @@ fun SvgaPlayer(
                         currentOnAnimEnd()
                     }
                 }
-                state.bind(SvgaController(this) { currentOnError() })
+                state.bind(
+                    SvgaController(
+                        view = this,
+                        onError = { currentOnError() },
+                        onDownloadState = { currentOnDownloadState(it) },
+                    )
+                )
             }
         },
         update = { view ->
@@ -209,6 +227,7 @@ fun SvgaPlayer(
                         config,
                         onError = { currentOnError() },
                         dynamicBlock = currentDynamicBlock,
+                        onDownloadState = { currentOnDownloadState(it) },
                     )
                 }
             }
