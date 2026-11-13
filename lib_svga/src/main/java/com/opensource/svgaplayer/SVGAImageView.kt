@@ -155,7 +155,20 @@ open class SVGAImageView @JvmOverloads constructor(
         this.dynamicBlock = dynamicBlock
         this.onError = onError
         this.keepPlaceholderOnReload = keepPlaceholderOnReload
+        //同资源原地重播路径（isReplayDrawable 提前返回）不会经过 parserSource，
+        //loops/mAutoPlay 需在此先行应用，否则仅变更 loopCount/autoPlay 的 config 会被吞掉
+        var playbackConfigChanged = false
+        if (config != null && (config.loopCount != loops || config.autoPlay != mAutoPlay)) {
+            loops = config.loopCount
+            mAutoPlay = config.autoPlay
+            playbackConfigChanged = true
+        }
         if (isReplayDrawable(source)) {
+            if (playbackConfigChanged && isAnimating) {
+                //在播会话已把旧 loops 注册进共享时钟（Session 捕获的是值），
+                //需重启动画才能让新的循环次数生效
+                startAnimation()
+            }
             return this
         }
         this.lastSource = source

@@ -101,7 +101,11 @@ private fun SvgaTestScreen() {
                 listOf(0 to "无限", 1 to "1 次", 3 to "3 次").forEach { (count, label) ->
                     FilterChip(
                         selected = loops == count,
-                        onClick = { state.config = SVGAConfig(loopCount = count) },
+                        onClick = {
+                            state.config = SVGAConfig(loopCount = count)
+                            //切换循环次数会重启动画，同步复位暂停标记，保持暂停/继续按钮状态一致
+                            paused = false
+                        },
                         label = { Text(label) },
                     )
                 }
