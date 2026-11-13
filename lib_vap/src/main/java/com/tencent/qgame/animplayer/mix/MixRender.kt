@@ -182,6 +182,12 @@ class MixRender(private val mixAnimPlugin: MixAnimPlugin) {
             ALog.i(TAG, "updateSrcTexture skip, texture not created, srcId=${src.srcId}")
             return
         }
+        // 注入的外部位图配置不受GL支持时跳过重传(texImage2D会抛invalid Bitmap format),
+        // 保持既有纹理, 避免单个异常资源中断整个渲染线程
+        if (!TextureLoadUtil.isGlSupportedConfig(bitmap)) {
+            ALog.e(TAG, "updateSrcTexture skip, unsupported config=${bitmap.config} srcId=${src.srcId}")
+            return
+        }
         ALog.i(TAG, "updateSrcTexture srcId=${src.srcId} size=${bitmap.width}x${bitmap.height}")
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, src.srcTextureId)
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)

@@ -2,6 +2,7 @@ package cn.leo.base.bitmap
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.os.Build
 import kotlin.math.min
@@ -35,6 +36,11 @@ abstract class BitmapDecoder<T> {
         val source = runCatching { onCreateSource(data) }.getOrNull() ?: return null
         return runCatching {
             ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                // 广色域/16bit源默认解码为RGBA_F16, GLUtils.texImage2D不支持该配置
+                // (vap动态图上传纹理时抛invalid Bitmap format, 中断整个播放流程),
+                // 指定sRGB目标色彩空间保证输出8bit位图(ARGB_8888),
+                // 与BitmapFactory降级路径的RGB_565色彩语义保持一致
+                decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
                 val srcWidth = info.size.width
                 val srcHeight = info.size.height
                 if (srcWidth > 0 && srcHeight > 0) {
@@ -48,7 +54,21 @@ abstract class BitmapDecoder<T> {
                     )
                 }
             }
-        }.getOrNull()
+        }.getOrNull()?.let(::ensureGlCompatibleConfig)
+    }
+
+    /**
+     * 安全网: 保证解码结果配置可被GLUtils.texImage2D上传(仅支持ARGB_8888/RGB_565),
+     * 其余配置(RGBA_F16等)拷贝为ARGB_8888; 拷贝失败返回null, 调用方降级到BitmapFactory路径
+     */
+    private fun ensureGlCompatibleConfig(bitmap: Bitmap?): Bitmap? {
+        if (bitmap == null) return null
+        return when (bitmap.config) {
+            Bitmap.Config.ARGB_8888, Bitmap.Config.RGB_565 -> bitmap
+            else -> runCatching {
+                bitmap.copy(Bitmap.Config.ARGB_8888, false)
+            }.getOrNull()?.also { bitmap.recycle() }
+        }
     }
 
     private fun decodeByBitmapFactory(data: T, reqWidth: Int, reqHeight: Int): Bitmap? {

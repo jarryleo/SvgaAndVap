@@ -21,6 +21,17 @@ import android.opengl.GLUtils
 
 object TextureLoadUtil {
     private const val TAG = "TextureUtil"
+
+    /**
+     * GLUtils.texImage2D 仅支持 ARGB_8888/RGB_565 配置,
+     * ALPHA_8/RGBA_F16(广色域图)等会抛 IllegalArgumentException: invalid Bitmap format,
+     * 该异常沿渲染初始化链路上抛会被当作解码失败中断整个播放流程
+     */
+    fun isGlSupportedConfig(bitmap: Bitmap): Boolean {
+        return bitmap.config == Bitmap.Config.ARGB_8888
+                || bitmap.config == Bitmap.Config.RGB_565
+    }
+
     fun loadTexture(bitmap: Bitmap?): Int {
         val textureObjectIds = IntArray(1)
         GLES20.glGenTextures(1, textureObjectIds, 0)
@@ -36,6 +47,13 @@ object TextureLoadUtil {
 
         if (bitmap.isRecycled) {
             ALog.e(TAG, "bitmap isRecycled")
+            GLES20.glDeleteTextures(1, textureObjectIds, 0)
+            return 0
+        }
+
+        if (!isGlSupportedConfig(bitmap)) {
+            ALog.e(TAG, "unsupported bitmap config=${bitmap.config} size=${bitmap.width}x${bitmap.height}")
+            GLES20.glDeleteTextures(1, textureObjectIds, 0)
             return 0
         }
 
