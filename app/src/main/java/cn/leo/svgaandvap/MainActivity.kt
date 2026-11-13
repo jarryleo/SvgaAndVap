@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
             SvgaAndVapTheme {
                 HomeScreen(
                     onOpenSvga = { startActivity(Intent(this, SvgaTestActivity::class.java)) },
+                    onOpenSvgaList = { startActivity(Intent(this, SvgaListTestActivity::class.java)) },
                     onOpenVap = { startActivity(Intent(this, VapTestActivity::class.java)) },
                     onClearCache = {
                         // 清除 SVGA 与 VAP 的内存缓存 + 文件缓存
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(
     onOpenSvga: () -> Unit,
+    onOpenSvgaList: () -> Unit,
     onOpenVap: () -> Unit,
     onClearCache: () -> Unit,
 ) {
@@ -81,6 +83,15 @@ fun HomeScreen(
                     .height(56.dp),
             ) {
                 Text(text = "SVGA 测试")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onOpenSvgaList,
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .height(56.dp),
+            ) {
+                Text(text = "SVGA 列表复用测试")
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(

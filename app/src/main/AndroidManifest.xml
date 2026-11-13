@@ -27,6 +27,9 @@
             android:name=".SvgaTestActivity"
             android:label="SVGA 测试" />
         <activity
+            android:name=".SvgaListTestActivity"
+            android:label="SVGA 列表复用测试" />
+        <activity
             android:name=".VapTestActivity"
             android:label="VAP 测试" />
     </application>

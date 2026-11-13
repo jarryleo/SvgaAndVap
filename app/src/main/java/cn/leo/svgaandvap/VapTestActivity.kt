@@ -50,8 +50,8 @@ private val VAP_ITEMS = listOf(
     VapItem("pk_start", "vap/pk_start.mp4") {
         // 内置动态元素配置, 用 assets 头像图填充(用法见 lib_vap/README.MD)
         setImage("avatar1", "vap/head.png")
-        //setImage("avatar1", "https://res.dawalive.com/FtRBVni0G0T7zcSWmShW-fnHwktQ?imageslim")
-        setImage("avatar2", "https://picsum.photos/300/300?random=2")
+        setImage("avatar2", "https://res.dawalive.com/FtRBVni0G0T7zcSWmShW-fnHwktQ?imageslim")
+        //setImage("avatar2", "https://picsum.photos/300/300?random=2")
         setText("nick1", "测试长文本跑马灯效果测试长文本跑马灯效果测试长文本跑马灯效果")
         setText("nick2", "nick2")
         setText("ID1", "ID1")
@@ -79,7 +79,7 @@ class VapTestActivity : ComponentActivity() {
 private fun VapTestScreen() {
     var selected by remember { mutableIntStateOf(0) }
     val state = rememberVapPlayerState()
-    // AnimView.load: loopCount 小于 1 按播放 1 次；config 变化会自动触发重新加载
+    // AnimView.load: loopCount 小于 0 次无限循环；config 变化会自动触发重新加载
     val loops = state.config.loopCount
     var status by remember { mutableStateOf("idle") }
     val item = VAP_ITEMS[selected]
