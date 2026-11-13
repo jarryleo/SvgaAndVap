@@ -27,7 +27,12 @@ class Resource(src: Src) {
     var loadType = Src.LoadType.UNKNOWN
     var tag = ""
     var bitmap: Bitmap? = null
-    var curPoint: PointRect? = null  // src在当前帧的位置信息
+    var curPoint: PointRect? = null  // src在当前帧的位置信息(仅渲染/触摸阶段填充, fetch阶段为null)
+
+    // src区域尺寸(mp4配置json), 作为动态图解码的目标尺寸兜底:
+    // 避免fetch阶段拿不到curPoint时按原图尺寸全量解码, 超大图导致内存暴涨/OOM
+    var w = 0
+    var h = 0
 
     init {
         id = src.srcId
@@ -35,5 +40,7 @@ class Resource(src: Src) {
         loadType = src.loadType
         tag = src.srcTag
         bitmap = src.bitmap
+        w = src.w
+        h = src.h
     }
 }

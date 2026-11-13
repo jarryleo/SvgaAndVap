@@ -30,6 +30,13 @@ import java.util.concurrent.ConcurrentHashMap
  */
 private object UrlDownloadFailed
 
+/**
+ * 动态图解码目标尺寸未知时(src区域尺寸缺失)的兜底上限:
+ * 超大图按此边长内缩放解码,避免按原图尺寸全量解码导致内存暴涨/OOM
+ * (与 GifDecoder.MAX_TILE_DIM 的"尺寸未知上限"语义一致)
+ */
+private const val FALLBACK_DECODE_MAX_DIM = 1024
+
 class DynamicResource {
     internal val imageMap = mutableMapOf<String, Any>()
     internal val textMap = mutableMapOf<String, String>()
@@ -69,14 +76,24 @@ fun AnimView.load(
     // 网络动态图下载结果缓存(url -> 已下载File / 失败哨兵):
     // 下载协程写入,资源解析与注入读取,须先于播放启动
     val urlFileCache = ConcurrentHashMap<String, Any?>()
-    startDynamicImageDownload(dynamicResource, urlFileCache)
+    // 各tag的解码目标尺寸(src区域尺寸), fetch阶段写入:
+    // 供异步注入链路复用同一尺寸解码,保持首帧与注入后清晰度一致
+    val tagSizeCache = ConcurrentHashMap<String, PointRect>()
+    startDynamicImageDownload(dynamicResource, urlFileCache, tagSizeCache)
     load(
         data = data,
         loopCount = loopCount,
         onStartRenderOnce = onStartRenderOnce,
         downloadState = downloadState,
         dynamicImage = { resource ->
-            resolveDynamicImage(context, imageResolveCache, urlFileCache, dynamicResource, resource)
+            resolveDynamicImage(
+                context,
+                imageResolveCache,
+                urlFileCache,
+                tagSizeCache,
+                dynamicResource,
+                resource
+            )
         },
         dynamicText = {
             val tag = it.tag
@@ -94,7 +111,8 @@ fun AnimView.load(
  */
 private fun AnimView.startDynamicImageDownload(
     dynamicResource: DynamicResource,
-    urlFileCache: ConcurrentHashMap<String, Any?>
+    urlFileCache: ConcurrentHashMap<String, Any?>,
+    tagSizeCache: ConcurrentHashMap<String, PointRect>
 ) {
     dynamicDownloadJob?.cancel("load new dynamic resource")
     dynamicDownloadJob = null
@@ -117,8 +135,10 @@ private fun AnimView.startDynamicImageDownload(
             // 同一url可能被多个tag引用,逐一注入;会话被新load取代时由代数号校验丢弃
             dynamicResource.imageMap.forEach { (tag, image) ->
                 if (image == url) {
-                    // 0,0=全尺寸解码,与解析阶段行为一致(此时无目标尺寸信息)
-                    updateDynamicImage(tag, decodeImageFile(file, 0, 0), epoch)
+                    // 尺寸未知(注入早于配置解析完成)按兜底上限解码,不再全尺寸解码
+                    val size = tagSizeCache[tag]
+                        ?: PointRect(0, 0, FALLBACK_DECODE_MAX_DIM, FALLBACK_DECODE_MAX_DIM)
+                    updateDynamicImage(tag, decodeImageFile(file, size.w, size.h), epoch)
                 }
             }
         }
@@ -250,6 +270,7 @@ private fun resolveDynamicImage(
     context: Context,
     cache: HashMap<String, Any?>,
     urlFileCache: ConcurrentHashMap<String, Any?>,
+    tagSizeCache: ConcurrentHashMap<String, PointRect>,
     dynamicResource: DynamicResource,
     resource: Resource
 ): Any? {
@@ -257,25 +278,41 @@ private fun resolveDynamicImage(
     if (cache.containsKey(tag)) {
         return cache[tag]
     }
-    val reqWidth = resource.curPoint?.w ?: 0
-    val reqHeight = resource.curPoint?.h ?: 0
+    // 解码目标尺寸: src区域尺寸; 尺寸未知(异常配置)按兜底上限, 防止超大图全量解码
+    val decodeSize = resolveDecodeSize(resource)
+    // 记录供异步注入链路复用(见startDynamicImageDownload)
+    tagSizeCache[tag] = decodeSize
     val resolved: Any? = when (val image = dynamicResource.imageMap[tag]) {
         is Bitmap -> image
-        is File -> decodeImageFile(image, reqWidth, reqHeight)
-        is Int -> decodeImageRes(context, image, reqWidth, reqHeight)
+        is File -> decodeImageFile(image, decodeSize.w, decodeSize.h)
+        is Int -> decodeImageRes(context, image, decodeSize.w, decodeSize.h)
         is String -> when {
             //网络图不阻塞播放:已就绪(本次下载完成或磁盘缓存命中)则同步解码,
             //否则返回null按缺失占位,待下载完成后异步注入(见startDynamicImageDownload)
-            SourceUtil.isUrl(image) -> resolveUrlImage(context, urlFileCache, image, reqWidth, reqHeight)
+            SourceUtil.isUrl(image) -> resolveUrlImage(context, urlFileCache, image, decodeSize.w, decodeSize.h)
 
-            SourceUtil.isFilePath(image) -> decodeImageFile(File(image), reqWidth, reqHeight)
-            else -> decodeImageAsset(context, image, reqWidth, reqHeight) //尝试Assert
+            SourceUtil.isFilePath(image) -> decodeImageFile(File(image), decodeSize.w, decodeSize.h)
+            else -> decodeImageAsset(context, image, decodeSize.w, decodeSize.h) //尝试Assert
         }
 
         else -> null
     }
     cache[tag] = resolved
     return resolved
+}
+
+/**
+ * 动态图解码目标尺寸: 优先curPoint(仅触摸阶段填充), 其次src区域尺寸(mp4配置json),
+ * 均无效(异常配置)时按兜底上限: BitmapDecoder收到非正尺寸会按原图尺寸全量解码,
+ * 超大图(如10000x10000)将瞬间占用上百MB内存甚至OOM
+ */
+private fun resolveDecodeSize(resource: Resource): PointRect {
+    val w = resource.curPoint?.w ?: resource.w
+    val h = resource.curPoint?.h ?: resource.h
+    if (w > 0 && h > 0) {
+        return PointRect(0, 0, w, h)
+    }
+    return PointRect(0, 0, FALLBACK_DECODE_MAX_DIM, FALLBACK_DECODE_MAX_DIM)
 }
 
 /**

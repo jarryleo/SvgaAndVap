@@ -351,6 +351,20 @@ internal class SVGACanvasDrawer(
         return tempSize
     }
 
+    /**
+     * [getSpriteMaxSize] 的兜底包装:
+     * 算不出有效尺寸(key与精灵不匹配或所有帧不可见)时退回动画画布尺寸,
+     * 避免0x0请求让解码器按原图尺寸全量解码, 超大动态图导致内存暴涨/OOM
+     * (0x0结果已被getSpriteMaxSize缓存, 兜底分支不会重复触发全帧扫描)
+     */
+    private fun getSpriteMaxSizeSafely(key: String): Size {
+        val size = getSpriteMaxSize(key)
+        if (size.width > 0 && size.height > 0) {
+            return size
+        }
+        return Size(videoItem.requestFrameWidth, videoItem.requestFrameHeight)
+    }
+
     private fun drawImage(sprite: SVGADrawerSprite, canvas: Canvas) {
         val imageKey = sprite.imageKey ?: return
         val isHidden = dynamicItem?.dynamicHidden?.get(imageKey) == true
@@ -364,14 +378,14 @@ internal class SVGACanvasDrawer(
         var placeHolderBitmap = videoItem.imageMap[bitmapKey]
         //需要绘制的bitmap
         val drawingBitmap = if (isReplaceImage(imageKey)) {
-            val size = getSpriteMaxSize(bitmapKey) //需要修改为最大尺寸
+            val size = getSpriteMaxSizeSafely(bitmapKey) //需要修改为最大尺寸
             //替换后的bitmap
             val replaceBitmap = dynamicItem?.requestImage(
                 bitmapKey, size.width, size.height
             )
             (replaceBitmap ?: placeHolderBitmap)
         } else if (isReplaceText(imageKey)) {
-            val size = getSpriteMaxSize(bitmapKey) //需要修改为最大尺寸
+            val size = getSpriteMaxSizeSafely(bitmapKey) //需要修改为最大尺寸
             //替换最大尺寸占位图（本地缓存，不污染共享实体）
             if (placeHolderBitmap != null) {
                 val placeHolderArea = placeHolderBitmap.width * placeHolderBitmap.height
