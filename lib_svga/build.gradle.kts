@@ -25,7 +25,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":lib_base"))
+    api(project(":lib_base"))
     implementation(libs.wire)
 }
 

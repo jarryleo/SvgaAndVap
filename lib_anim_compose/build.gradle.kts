@@ -28,9 +28,8 @@ android {
 }
 
 dependencies {
-    implementation(project(":lib_base"))
-    implementation(project(":lib_svga"))
-    implementation(project(":lib_vap"))
+    api(project(":lib_svga"))
+    api(project(":lib_vap"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
