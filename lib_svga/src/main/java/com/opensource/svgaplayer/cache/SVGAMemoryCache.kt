@@ -157,7 +157,7 @@ class SVGAMemoryCache(maxBytes: Long = defaultMaxBytes) {
         val INSTANCE by lazy { SVGAMemoryCache(defaultMaxBytes) }
 
         /** 内存缓存字节预算，默认 100MB */
-        var defaultMaxBytes: Long = 100L * 1024 * 1024
+        var defaultMaxBytes: Long = 64L * 1024 * 1024
             set(value) {
                 field = value
                 INSTANCE.resizeCache(value)
