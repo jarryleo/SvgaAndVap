@@ -46,7 +46,7 @@ class MaskConfig() {
     
     fun safeSetMaskBitmapAndReleasePre(bitmap: Bitmap?) {
         if (maskTexId > 0)  { //释放
-            TextureLoadUtil.releaseTexure(maskTexId)
+            TextureLoadUtil.releaseTexture(maskTexId)
             maskTexId = 0
         }
         alphaMaskBitmap = bitmap
