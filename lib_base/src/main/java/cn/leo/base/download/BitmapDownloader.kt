@@ -24,8 +24,13 @@ import kotlin.time.Duration.Companion.seconds
  * Date        :2024/7/2
  * Description : Bitmap下载器（svga/vap 共享, 内存缓存 -> 磁盘缓存 -> 网络下载）
  */
-object BitmapDownloader : BitmapDownloadInterface {
-    private const val TAG = "BitmapDownloader"
+class BitmapDownloader private constructor() : BitmapDownloadInterface {
+
+    companion object {
+        private const val TAG = "BitmapDownloader"
+        var bitmapDownloader: BitmapDownloadInterface = BitmapDownloader()
+    }
+
     private val downLoadQueue = ConcurrentLinkedQueue<String>()
 
     override suspend fun downloadBitmap(

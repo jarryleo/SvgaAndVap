@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.http.HttpResponseCache
 import cn.leo.base.cache.BitmapCache
 import cn.leo.base.cache.BitmapDiskCache
+import cn.leo.base.download.BitmapDownloadInterface
+import cn.leo.base.download.BitmapDownloader
 import cn.leo.base.log.ILogger
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.cache.SVGAMemoryCache
@@ -69,6 +71,13 @@ object SVGAManager {
         loggerProxy?.let { logger ->
             SVGALogger.injectSVGALoggerImp(logger)
         }
+    }
+
+    /**
+     * 设置bitmap下载器
+     */
+    fun setBitmapDownload(bitmapDownloadInterface: BitmapDownloadInterface) {
+        BitmapDownloader.bitmapDownloader = bitmapDownloadInterface
     }
 
     /**

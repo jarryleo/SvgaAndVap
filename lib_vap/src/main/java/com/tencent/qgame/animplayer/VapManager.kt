@@ -1,7 +1,6 @@
 package com.tencent.qgame.animplayer
 
 import android.content.Context
-import android.graphics.Bitmap
 import cn.leo.base.cache.BitmapCache
 import cn.leo.base.cache.BitmapDiskCache
 import cn.leo.base.download.BitmapDownloadInterface
@@ -20,7 +19,7 @@ import java.io.File
  * Date        :2026/2/3
  * Description : 初始化vap
  */
-object VapManager : BitmapDownloadInterface {
+object VapManager {
 
     /** init 时记录，供 clearCache 清理共享 bitmap 磁盘缓存使用（避免持有外部 Context） */
     private var appContext: Context? = null
@@ -33,7 +32,6 @@ object VapManager : BitmapDownloadInterface {
         FileDownloadManager.shared
     }
 
-    private var bitmapDownloader: BitmapDownloadInterface = BitmapDownloader
 
     /**
      * 初始化，不初始也能用，就是第一个vap没有缓存
@@ -52,10 +50,10 @@ object VapManager : BitmapDownloadInterface {
     }
 
     /**
-     * 设置图片下载器
+     * 设置bitmap下载器
      */
     fun setBitmapDownload(bitmapDownloadInterface: BitmapDownloadInterface) {
-        bitmapDownloader = bitmapDownloadInterface
+        BitmapDownloader.bitmapDownloader = bitmapDownloadInterface
     }
 
     fun clearCache() {
@@ -71,15 +69,4 @@ object VapManager : BitmapDownloadInterface {
         return downloader.download(url, file)
     }
 
-    /**
-     * 下载图片并返回bitmap
-     */
-    override suspend fun downloadBitmap(
-        context: Context,
-        url: String,
-        reqWidth: Int,
-        reqHeight: Int
-    ): Bitmap? {
-        return bitmapDownloader.downloadBitmap(context, url, reqWidth, reqHeight)
-    }
 }
