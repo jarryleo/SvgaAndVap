@@ -14,7 +14,7 @@ internal object BitmapSampleSizeCalculator {
         if (height > reqHeight || width > reqWidth) {
             // Calculate the largest inSampleSize value that is a power of 2 and keeps both
             // height and width larger than the requested height and width.
-            while (height / inSampleSize >= reqHeight && width / inSampleSize >= reqWidth) {
+            while (height / inSampleSize >= (reqHeight * 1.5) && width / inSampleSize >= (reqWidth * 1.5)) {
                 inSampleSize *= 2
             }
         }
