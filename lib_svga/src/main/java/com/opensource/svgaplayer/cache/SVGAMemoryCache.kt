@@ -14,7 +14,7 @@ import com.opensource.svgaplayer.utils.log.LogUtils
  * 缓存几乎不命中，同一资源被反复解码出多套 bitmap；且 entryRemoved 中的
  * oldValue?.clear() 调用的是 WeakReference.clear()，对 bitmap 释放完全无效。
  *
- * 现改为强引用缓存：总预算按字节计（默认 100MB），超限驱逐最旧条目；
+ * 现改为强引用缓存：总预算按字节计（默认 64MB，见 [defaultMaxBytes]），超限驱逐最旧条目；
  * 驱逐/替换/清空时仅释放无 view 绑定（引用计数为 0）的实体，展示中的动画不受影响，
  * 由其 view clear 时归还缓存。实体释放语义见 [SVGAVideoEntity.release]。
  *

@@ -64,6 +64,8 @@ open class FileDownloader {
                         LogUtils.info(
                             TAG, "================ file download success ================"
                         )
+                        //下载文件落盘即记账: zip 后续解压成目录时会再次 recordWrite 覆盖尺寸
+                        SVGAFileCache.recordWrite(cacheKey)
                         complete((status.file ?: cacheFile).inputStream())
                     }
 

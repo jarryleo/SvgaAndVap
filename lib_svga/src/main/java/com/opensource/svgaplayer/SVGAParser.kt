@@ -1065,6 +1065,8 @@ class SVGAParser private constructor(context: Context) {
             if (downloadCacheFile.exists()) {
                 downloadCacheFile.delete()
             }
+            //条目由下载文件换身为解压目录, 重新记账(目录尺寸), 供 LRU 淘汰使用
+            SVGAFileCache.recordWrite(cacheKey)
         } catch (e: Exception) {
             LogUtils.error(TAG, "================ unzip error ================")
             LogUtils.error(TAG, "error", e)

@@ -225,6 +225,8 @@ fun AnimView.load(
             val cacheKey = VapFileCache.buildCacheKey(data)
             val cacheFile = VapFileCache.buildCacheFile(cacheKey, context).first()
             if (cacheFile.exists()) {
+                //命中缓存: 刷新 LRU 顺序, 防长期未淘汰误删
+                VapFileCache.touch(cacheKey)
                 if (loadJob == currentJob) {
                     startPlayForce(cacheFile, onStartRenderOnce)
                 }
@@ -239,6 +241,8 @@ fun AnimView.load(
                     downloadState(it)
                 }
                 if (it.isSuccessful() && isAttachedToWindow && loadJob == currentJob) {
+                    //下载落盘完成: 记账并按容量上限触发 LRU 淘汰
+                    VapFileCache.recordWrite(cacheKey)
                     it.file?.let { file ->
                         startPlayForce(file, onStartRenderOnce)
                     }

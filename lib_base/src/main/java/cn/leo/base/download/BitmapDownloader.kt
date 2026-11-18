@@ -117,7 +117,12 @@ class BitmapDownloader private constructor() : BitmapDownloadInterface {
         if (!cacheFile.exists()) {
             return null
         }
-        return BitmapFileDecoder.decodeBitmapFrom(cacheFile.toString(), reqWidth, reqHeight)
+        val bitmap = BitmapFileDecoder.decodeBitmapFrom(cacheFile.toString(), reqWidth, reqHeight)
+        if (bitmap != null) {
+            //解码成功才算真正命中: 刷新 LRU 顺序, 防长期未淘汰误删
+            BitmapDiskCache.touch(context, cacheKey)
+        }
+        return bitmap
     }
 
     private suspend fun cacheBitmapToDisk(
@@ -132,5 +137,7 @@ class BitmapDownloader private constructor() : BitmapDownloadInterface {
         cacheFile.outputStream().use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
+        //落盘完成记账, 供容量上限下的 LRU 淘汰
+        BitmapDiskCache.recordWrite(context, cacheKey)
     }
 }

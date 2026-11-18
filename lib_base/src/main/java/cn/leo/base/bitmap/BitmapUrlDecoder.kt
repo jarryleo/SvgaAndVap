@@ -49,9 +49,15 @@ object BitmapUrlDecoder : BitmapDecoder<URL>() {
      */
     private fun resolveCacheFile(url: URL): File? {
         val cacheFile = BitmapSourceCache.cacheFile(url.toString()) ?: return null
-        if (cacheFile.exists()) return cacheFile
+        if (cacheFile.exists()) {
+            //命中刷新 LRU 顺序, 防长期未淘汰误删
+            BitmapSourceCache.touch(url.toString())
+            return cacheFile
+        }
         return runCatching {
             downloadToFile(url, cacheFile)
+            //落盘完成记账, 供容量上限下的 LRU 淘汰
+            BitmapSourceCache.recordWrite(url.toString())
             cacheFile
         }.getOrNull()
     }
