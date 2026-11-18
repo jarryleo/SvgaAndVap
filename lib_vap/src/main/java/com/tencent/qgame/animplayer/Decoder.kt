@@ -68,9 +68,15 @@ abstract class Decoder(val player: AnimPlayer) : IAnimListener {
             speedControlUtil.setFixedPlaybackRate(value)
             field = value
         }
-    var playLoop = 0 // 循环播放次数
+
+    // 循环播放次数: 主线程 setter 与解码线程 EOS 消耗(player.playLoop = playLoop)并发读写
+    @Volatile
+    var playLoop = 0
     @Volatile
     var isRunning = false // 是否正在运行
+
+    // 解码线程循环热读、主线程 stop() 写, 必须保证可见性
+    @Volatile
     var isStopReq = false // 是否需要停止
     val speedControlUtil by lazy { SpeedControlUtil() }
 

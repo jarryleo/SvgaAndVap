@@ -38,6 +38,9 @@ class AnimPlayer(val animView: IAnimView) {
 
     // 设置默认的fps <= 0 表示以vapc配置为准 > 0  表示以此设置为准
     var defaultFps: Int = 0
+
+    // 解码/音频线程 EOS 消耗时回写(player.playLoop = playLoop), 与主线程 setter 并发, 需保证可见性
+    @Volatile
     var playLoop: Int = 0
         set(value) {
             decoder?.playLoop = value
@@ -95,6 +98,12 @@ class AnimPlayer(val animView: IAnimView) {
 
     val configManager = AnimConfigManager(this)
     val pluginManager = AnimPluginManager(this)
+
+    /**
+     * 启动会话锁: innerStartPlay 与 tryCancelStartup 的互斥锁。
+     * 必须是实例级锁——类锁会让多 AnimView(列表场景)的启动/取消互相阻塞
+     */
+    private val startLock = Any()
 
     fun onSurfaceTextureDestroyed() {
         if (!isSurfaceAvailable && !isStartRunning) {
@@ -156,7 +165,7 @@ class AnimPlayer(val animView: IAnimView) {
     }
 
     private fun innerStartPlay(epoch: Int, fileContainer: IFileContainer) {
-        synchronized(AnimPlayer::class.java) {
+        synchronized(startLock) {
             // 迟到会话防护:parseConfig 越过开头 epoch 检查后,取消可能在它完成前发生。
             // 进入临界区必须重新校验,防止已取消的会话重新设置 startRunnable /
             // 拉起 decoder,导致播放错误视频或 render create fail。
@@ -201,7 +210,7 @@ class AnimPlayer(val animView: IAnimView) {
      * @return true 取消成功;false 会话已不在启动阶段,需要走 decoder.stop()
      */
     fun tryCancelStartup(): Boolean {
-        synchronized(AnimPlayer::class.java) {
+        synchronized(startLock) {
             if (!isStartRunning) {
                 ALog.i(TAG, "tryCancelStartup called but not in startup phase, noop")
                 return false
@@ -241,7 +250,22 @@ class AnimPlayer(val animView: IAnimView) {
         }
     }
 
+    /**
+     * 更新遮罩配置。可能在主线程调用, 而 safeSetMaskBitmapAndReleasePre 会删除 GL 纹理、
+     * MaskRender 也在渲染线程读 maskConfig——统一 post 到渲染线程执行,
+     * 与渲染循环串行化(GL 上下文归属渲染线程, 主线程 glDeleteTextures 是无效调用, 会泄漏纹理)。
+     * 渲染线程尚未就绪(启动前)时无纹理存在, 直接更新字段即可
+     */
     fun updateMaskConfig(maskConfig: MaskConfig?) {
+        val handler = decoder?.renderThread?.handler
+        if (handler != null) {
+            handler.post { applyMaskConfig(maskConfig) }
+        } else {
+            applyMaskConfig(maskConfig)
+        }
+    }
+
+    private fun applyMaskConfig(maskConfig: MaskConfig?) {
         configManager.config?.maskConfig = configManager.config?.maskConfig ?: MaskConfig()
         configManager.config?.maskConfig?.safeSetMaskBitmapAndReleasePre(maskConfig?.alphaMaskBitmap)
         configManager.config?.maskConfig?.maskPositionPair = maskConfig?.maskPositionPair

@@ -66,7 +66,8 @@ class FileDownloadManager(
 ) {
     companion object {
 
-        // 创建信任所有证书的 TrustManager（沿用 svga 库的忽略证书校验策略, 两库统一行为）
+        // 信任所有证书的 TrustManager: 仅在宿主显式开启后生效
+        // (自签证书 CDN 等场景的逃生口; 默认走系统校验, 防止动画 URL 被劫持后投毒缓存)
         private val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -81,14 +82,40 @@ class FileDownloadManager(
         // 创建 HostnameVerifier
         private val trustAllHostnameVerifier = HostnameVerifier { _, _ -> true }
 
-        val okHttpClient: OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
-            .sslSocketFactory(trustAllSslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-            .hostnameVerifier(trustAllHostnameVerifier)
-            .build()
+        @Volatile
+        private var trustAllCertificatesEnabled = false
+
+        @Volatile
+        var okHttpClient: OkHttpClient = buildHttpClient(trustAllCertificatesEnabled)
+            private set
+
+        /**
+         * 是否信任所有证书(忽略证书校验与主机名校验)。
+         * 默认关闭(安全校验);自签证书等特殊场景可显式开启,立即生效于后续下载
+         */
+        fun setTrustAllCertificates(enabled: Boolean) {
+            if (trustAllCertificatesEnabled == enabled) return
+            trustAllCertificatesEnabled = enabled
+            okHttpClient = buildHttpClient(enabled)
+        }
+
+        private fun buildHttpClient(trustAll: Boolean): OkHttpClient {
+            return OkHttpClient.Builder()
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .writeTimeout(20, TimeUnit.SECONDS)
+                .callTimeout(60, TimeUnit.SECONDS)
+                .apply {
+                    if (trustAll) {
+                        sslSocketFactory(
+                            trustAllSslContext.socketFactory,
+                            trustAllCerts[0] as X509TrustManager
+                        )
+                        hostnameVerifier(trustAllHostnameVerifier)
+                    }
+                }
+                .build()
+        }
 
         /**
          * 共享实例并发额度：svga 动画 / vap 视频 / bitmap 图片共用一个池，

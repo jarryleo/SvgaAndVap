@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URL
 import java.net.URLDecoder
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 
@@ -31,7 +31,9 @@ class BitmapDownloader private constructor() : BitmapDownloadInterface {
         var bitmapDownloader: BitmapDownloadInterface = BitmapDownloader()
     }
 
-    private val downLoadQueue = ConcurrentLinkedQueue<String>()
+    // 在途 url 去重: newKeySet 的 add 原子返回是否首次加入,
+    // 替代 contains+add 两步(并发窗口内会双重下载)
+    private val downLoadQueue: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     override suspend fun downloadBitmap(
         context: Context,
@@ -61,14 +63,14 @@ class BitmapDownloader private constructor() : BitmapDownloadInterface {
             )
             return diskData
         }
-        if (downLoadQueue.contains(url)) {
+        if (!downLoadQueue.add(url)) {
+            // 已有同 url 在途下载, 本次放弃(调用方大多为动态图可选加载, 下次命中缓存)
             return null
         }
         BaseLog.d(
             TAG,
             "downloadBitmap url = $url, reqWidth = $reqWidth, reqHeight = $reqHeight"
         )
-        downLoadQueue.add(url)
         val bitmap = withTimeoutOrNull(30.seconds) {
             suspendCancellableCoroutine {
                 val decode = try {

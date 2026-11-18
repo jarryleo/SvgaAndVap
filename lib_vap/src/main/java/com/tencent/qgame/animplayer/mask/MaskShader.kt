@@ -110,4 +110,13 @@ class MaskShader(edgeBlurBoolean : Boolean) {
         GLES20.glUseProgram(program)
     }
 
+    /**
+     * 删除 program。须在创建它的渲染线程(GL 上下文持有)调用
+     */
+    fun release() {
+        if (program != 0) {
+            GLES20.glDeleteProgram(program)
+        }
+    }
+
 }

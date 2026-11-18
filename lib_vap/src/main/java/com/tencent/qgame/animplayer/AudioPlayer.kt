@@ -35,9 +35,15 @@ class AudioPlayer(val player: AnimPlayer) {
     var decoder: MediaCodec? = null
     var audioTrack: AudioTrack? = null
     val decodeThread = HandlerHolder(null, null)
+
+    // 以下标志均跨线程访问(音频线程循环读写 / 主线程 start/stop/destroy 写), 需保证可见性
+    @Volatile
     var isRunning = false
+    @Volatile
     var playLoop = 0
+    @Volatile
     var isStopReq = false
+    @Volatile
     var needDestroy = false
 
     // 保护 audioTrack 引用的锁,主线程 setVolume 与音频线程 startPlay/release 的并发点

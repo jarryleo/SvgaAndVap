@@ -22,6 +22,7 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -48,8 +49,10 @@ class SVGAVideoEntity {
     internal var audioList: List<SVGAAudioEntity> = emptyList()
     internal var soundPool: SoundPool? = null
 
-    //主体 bitmap 内存大户
-    internal var imageMap = HashMap<String, Bitmap>()
+    //主体 bitmap 内存大户。
+    //线程模型: IO 线程构造期写入, 之后仅读(主线程 drawer 读、LruCache sizeOf 在任意线程读)。
+    //用并发容器兜底跨线程可见性, 不再依赖 handler.post/LruCache 锁的顺带 happens-before
+    internal var imageMap = ConcurrentHashMap<String, Bitmap>()
     private var mCacheDir: File
     private var mFrameHeight = 0
     private var mFrameWidth = 0
@@ -257,9 +260,14 @@ class SVGAVideoEntity {
                 return@forEach
             }
             val filePath = generateBitmapFilePath(entry.value.utf8(), entry.key)
-            createBitmap(byteArray, filePath)?.let { bitmap ->
+            val bitmap = createBitmap(byteArray, filePath)
+            if (bitmap != null) {
                 LogUtils.debug(TAG, "createBitmap key = ${entry.key}")
                 imageMap[entry.key] = bitmap
+            } else {
+                //与 JSON 路径对齐: 字节解码且磁盘兜底均失败时标记残缺,
+                //阻止 imageMap 缺图的实体作为成功结果进入内存缓存被长期复用
+                isDecodeIncomplete = true
             }
         }
     }

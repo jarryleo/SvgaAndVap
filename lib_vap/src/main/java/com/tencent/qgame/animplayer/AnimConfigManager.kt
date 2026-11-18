@@ -30,7 +30,11 @@ class AnimConfigManager(val player: AnimPlayer) {
         private const val TAG = "${Constant.TAG}.AnimConfigManager"
     }
 
+    // 渲染线程 parse 写入、解码线程(onVideoRender/onDecoding)与主线程(updateMaskConfig)读,
+    // 引用本身需保证可见性; 字段级半更新窗口由渲染线程串行消费兜底
+    @Volatile
     var config: AnimConfig? = null
+    @Volatile
     var isParsingConfig = false // 是否正在读取配置
 
     /**

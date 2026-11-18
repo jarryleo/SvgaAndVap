@@ -202,6 +202,15 @@ class MixRender(private val mixAnimPlugin: MixAnimPlugin) {
     }
 
     /**
+     * 销毁渲染器自身持有的 GL 对象(shader program)。src 纹理由插件 destroy 逐个 release。
+     * 须在渲染线程调用
+     */
+    fun destroy() {
+        shader?.release()
+        shader = null
+    }
+
+    /**
      * CENTER_FULL 并不是严格的centerCrop(centerCrop已经前置处理)，此处主要是为防抖动做处理，复杂遮罩情况下需要固定src大小进行绘制防止抖动
      */
     private fun genSrcCoordsArray(array: FloatArray, fw: Int, fh: Int, sw: Int, sh: Int, fitType: Src.FitType): FloatArray {

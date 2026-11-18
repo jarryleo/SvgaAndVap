@@ -53,16 +53,24 @@ class MaskConfig() {
     }
     
 
+    /**
+     * 释放遮罩资源。须在渲染线程调用(GL 上下文持有), texture 不删除会随会话累积泄漏
+     */
     fun release() {
+        if (maskTexId > 0) {
+            TextureLoadUtil.releaseTexture(maskTexId)
+            maskTexId = 0
+        }
         alphaMaskBitmap = null
         maskTexPair = null
         maskPositionPair = null
     }
 
     override fun equals(other: Any?): Boolean {
-        return other is MaskConfig && this.alphaMaskBitmap != other.alphaMaskBitmap
-                && this.maskTexPair?.first != other.maskTexPair?.first && this.maskTexPair?.second != other.maskTexPair?.second
-                && this.maskPositionPair?.first != other.maskPositionPair?.first && this.maskPositionPair?.second != other.maskPositionPair?.second
+        // 位图为大对象按引用比较, 其余值字段按值比较
+        return other is MaskConfig && this.alphaMaskBitmap === other.alphaMaskBitmap
+                && this.maskTexPair == other.maskTexPair
+                && this.maskPositionPair == other.maskPositionPair
     }
 
     override fun hashCode(): Int {

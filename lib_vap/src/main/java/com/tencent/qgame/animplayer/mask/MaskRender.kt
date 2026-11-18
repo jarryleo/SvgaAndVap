@@ -127,4 +127,13 @@ class MaskRender(private val maskAnimPlugin: MaskAnimPlugin) {
 
     }
 
+    /**
+     * 销毁渲染器自身持有的 GL 对象(shader program)。遮罩纹理由 MaskConfig 释放。
+     * 须在渲染线程调用
+     */
+    fun destroy() {
+        maskShader?.release()
+        maskShader = null
+    }
+
 }

@@ -61,6 +61,9 @@ class MaskAnimPlugin(val player: AnimPlayer): IAnimPlugin {
     private fun destroy() {
         // 强制结束等待
         animConfig?.maskConfig?.release()
+        // 销毁 shader program(须与 onRenderCreate 同在渲染线程, GL 上下文仍持有)
+        maskRender?.destroy()
+        maskRender = null
     }
     
 }

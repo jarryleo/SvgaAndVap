@@ -26,6 +26,9 @@ class SpeedControlUtil {
 
     private var prevPresentUsec: Long = 0
     private var prevMonoUsec: Long = 0
+
+    // 渲染线程 parseConfig 后经 player.fps 写入, 解码线程 preRender 读, 需保证可见性
+    @Volatile
     private var fixedFrameDurationUsec: Long = 0
     private var loopReset = true
 

@@ -35,6 +35,12 @@ class MixAnimPlugin(val player: AnimPlayer): IAnimPlugin {
 
     companion object {
         private const val TAG = "${Constant.TAG}.MixAnimPlugin"
+
+        /**
+         * 资源回调等待上限: 宿主 IFetchResource 异步且回调丢失(如宿主线程抛异常未回调 result)时,
+         * 无限等待会挂起渲染线程, 该 view 后续所有会话(parseConfig/release 排队)全部停摆
+         */
+        private const val FETCH_RESOURCE_TIMEOUT_MS = 10_000L
     }
     var resourceRequest: IFetchResource? = null
     var resourceClickListener: OnResourceClickListener? = null
@@ -148,6 +154,10 @@ class MixAnimPlugin(val player: AnimPlayer): IAnimPlugin {
         }
         resourceRequest?.releaseResource(resources)
 
+        // 销毁 shader program(须与 onRenderCreate 同在渲染线程, GL 上下文仍持有)
+        mixRender?.destroy()
+        mixRender = null
+
         // 清理
         curFrameIndex = -1
         srcMap?.map?.clear()
@@ -226,10 +236,16 @@ class MixAnimPlugin(val player: AnimPlayer): IAnimPlugin {
             }
         }
 
-        // 同步等待所有资源完成
+        // 同步等待所有资源完成(带超时上限, 防宿主回调丢失永久挂起渲染线程)
         synchronized(lock) {
-            while (resultCbCount < totalSrc && !forceStopLock) {
-                lock.wait()
+            val deadline = SystemClock.elapsedRealtime() + FETCH_RESOURCE_TIMEOUT_MS
+            var remainMs = FETCH_RESOURCE_TIMEOUT_MS
+            while (resultCbCount < totalSrc && !forceStopLock && remainMs > 0) {
+                lock.wait(remainMs)
+                remainMs = deadline - SystemClock.elapsedRealtime()
+            }
+            if (resultCbCount < totalSrc && !forceStopLock) {
+                ALog.e(TAG, "fetchResourceSync timeout ${FETCH_RESOURCE_TIMEOUT_MS}ms, $resultCbCount/$totalSrc done")
             }
         }
         ALog.i(TAG, "fetchResourceSync cost=${SystemClock.elapsedRealtime() - time}ms")

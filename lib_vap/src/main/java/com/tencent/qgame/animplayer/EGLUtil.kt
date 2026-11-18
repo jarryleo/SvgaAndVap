@@ -110,7 +110,9 @@ class EGLUtil {
             eglMakeCurrent(eglDisplay, EGL10.EGL_NO_SURFACE, EGL10.EGL_NO_SURFACE, EGL10.EGL_NO_CONTEXT)
             eglDestroySurface(eglDisplay, eglSurface)
             eglDestroyContext(eglDisplay, eglContext)
-            eglTerminate(eglDisplay)
+            // 不对 EGL_DEFAULT_DISPLAY 调 eglTerminate: display 为进程共享句柄,
+            // 多 AnimView 并发播放时一个会话 terminate 会波及其他会话的 display;
+            // 只销毁本会话的 surface/context 即可
             surface?.release()
             surface = null
             // 重置句柄,保证 release 幂等,避免重复销毁野句柄

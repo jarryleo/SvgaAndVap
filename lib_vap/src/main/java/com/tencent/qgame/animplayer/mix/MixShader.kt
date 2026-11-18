@@ -91,4 +91,14 @@ class MixShader {
         GLES20.glUseProgram(program)
     }
 
+    /**
+     * 删除 program。须在创建它的渲染线程(GL 上下文持有)调用;
+     * 不删除的话长会话内反复 onRenderCreate 会持续累积 program 对象
+     */
+    fun release() {
+        if (program != 0) {
+            GLES20.glDeleteProgram(program)
+        }
+    }
+
 }
