@@ -19,13 +19,13 @@ package com.tencent.qgame.animplayer
 import android.content.Context
 import android.content.res.AssetManager
 import android.graphics.SurfaceTexture
-import android.media.MediaExtractor
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
+import com.tencent.qgame.animplayer.file.CustomAssetsFileContainer
 import com.tencent.qgame.animplayer.file.FileContainer
 import com.tencent.qgame.animplayer.file.IFileContainer
 import com.tencent.qgame.animplayer.inter.IAnimListener
@@ -65,6 +65,9 @@ open class AnimView @JvmOverloads constructor(
 
     @Volatile
     private var afterStopRunnable: Runnable? = null
+
+    // 首帧回调: 主线程 startPlayForce 写, 解码线程 onVideoRender 消费, 需保证可见性
+    @Volatile
     private var onStartRenderCallback: (() -> Unit)? = null
 
     // 播放请求代际号:每次 startPlayForce 递增,用于作废停止-重启链路中
@@ -89,6 +92,10 @@ open class AnimView @JvmOverloads constructor(
     }
 
     // 代理监听
+    // 对外回调线程契约: 除 onVideoConfigReady 外, animListener 的所有回调
+    // (onVideoStart/onVideoRender/onVideoComplete/onVideoDestroy/onFailed)
+    // 与 startPlayForce 的 onStartRenderOnce 均统一派发到主线程;
+    // onVideoConfigReady 因返回值参与启动决策, 保持在渲染线程同步回调(实现方不应在其中做耗时操作)
     private val animProxyListener by lazy {
         object : IAnimListener {
 
@@ -102,20 +109,24 @@ open class AnimView @JvmOverloads constructor(
 
             override fun onVideoStart() {
                 ALog.d(TAG, "onVideoStart isForcePlayRunner = false")
-                animListener?.onVideoStart()
+                notifyUserOnMain { it.onVideoStart() }
             }
 
             override fun onVideoRender(frameIndex: Int, config: AnimConfig?) {
-                animListener?.onVideoRender(frameIndex, config)
+                // 每帧回调仅在用户监听存在时才派发, 避免无监听时的空转消息
+                if (animListener != null) {
+                    notifyUserOnMain { it.onVideoRender(frameIndex, config) }
+                }
                 if (onStartRenderCallback != null && frameIndex == 1) {
                     ALog.d(TAG, "onVideoRender isForcePlayRunner = false")
-                    onStartRenderCallback?.invoke()
+                    val callback = onStartRenderCallback
                     onStartRenderCallback = null
+                    ui { callback?.invoke() }
                 }
             }
 
             override fun onVideoComplete() {
-                animListener?.onVideoComplete()
+                notifyUserOnMain { it.onVideoComplete() }
                 ALog.d(
                     TAG,
                     "onVideoComplete player.playLoop = ${player.playLoop}"
@@ -141,10 +152,10 @@ open class AnimView @JvmOverloads constructor(
             }
 
             override fun onVideoDestroy() {
-                animListener?.onVideoDestroy()
-                // onVideoDestroy 来自 renderThread,统一切回主线程执行停止-重启交接,
+                // onVideoDestroy 来自 renderThread:对外回调与停止-重启交接统一切回主线程,
                 // 保证 afterStopRunnable 的读取、代际校验与 startPlayForce 串行化。
                 ui {
+                    notifyUserOnMain { it.onVideoDestroy() }
                     val runnable = afterStopRunnable
                     afterStopRunnable = null
                     ALog.d(
@@ -160,10 +171,16 @@ open class AnimView @JvmOverloads constructor(
                     TAG,
                     "onFailed isForcePlayRunner = false, errorType = $errorType, errorMsg = $errorMsg"
                 )
-                animListener?.onFailed(errorType, errorMsg)
+                notifyUserOnMain { it.onFailed(errorType, errorMsg) }
             }
 
         }
+    }
+
+    /** 对外回调统一派发到主线程(线程契约见 animProxyListener 注释); 无监听时 no-op */
+    private inline fun notifyUserOnMain(crossinline notify: (IAnimListener) -> Unit) {
+        val listener = animListener ?: return
+        ui { notify(listener) }
     }
 
     // 保证AnimView已经布局完成才加入TextureView
@@ -629,143 +646,6 @@ open class AnimView @JvmOverloads constructor(
             lastFile?.apply {
                 startPlayForce(this)
             }
-        }
-    }
-
-    /**
-     * 解决Assets资源暂停重播时候失败问题
-     *
-     * 线程安全说明:底层 assets 流会被两个线程访问——
-     * anim_render_thread 在 AnimConfigManager.parse() 中 read/skip/closeRandomRead,
-     * 主线程在 startPlayInternal/startPlayForce/destroy 中 close 上一次播放的容器。
-     * 快速切换动画时两者并发,会对 native _FileAsset/IncFsFileMap 形成
-     * use-after-free(SIGSEGV)或 double free(scudo heap corruption SIGABRT)。
-     * 因此所有流操作都在 streamLock 内串行化,close 幂等,
-     * 流关闭后 read 安全返回 EOF(-1),让 parse 优雅失败(默认配置/失败回调),
-     * 由 startEpoch/playGeneration 代际校验保证过期会话不会启动。
-     */
-    class CustomAssetsFileContainer(
-        private val assetManager: AssetManager,
-        private val assetsPath: String
-    ) :
-        IFileContainer {
-
-        companion object {
-            private const val TAG = "${Constant.TAG}.FileContainer"
-        }
-
-        private val streamLock = Any()
-        private var assetsInputStream: AssetManager.AssetInputStream? = null
-
-        init {
-            ALog.i(TAG, "AssetsFileContainer init")
-            makeStream()
-        }
-
-        private fun makeStream() {
-            synchronized(streamLock) {
-                val stream = try {
-                    assetManager.open(
-                        assetsPath,
-                        AssetManager.ACCESS_STREAMING
-                    )
-                } catch (e: Exception) {
-                    ALog.e(TAG, "$assetsPath not found! $e")
-                    null
-                }
-                if (stream != null) {
-                    assetsInputStream = stream as? AssetManager.AssetInputStream
-                }
-            }
-        }
-
-        override fun setDataSource(extractor: MediaExtractor) {
-            try {
-                setDataInner(extractor) //修复可能出现IOException: Failed to instantiate extractor.
-            } catch (e: Exception) {
-                ALog.e(TAG, "AssetsFileContainer setDataSource error $e")
-                setDataInner(extractor)
-            }
-        }
-
-        private fun setDataInner(extractor: MediaExtractor) {
-            // 每个extractor独立打开fd并即刻关闭:一次播放中音视频两个MediaExtractor
-            // 共享同一fd时,部分机型会因文件偏移竞争读到错位数据
-            // (表现为No video/audio track found或readSampleData立刻EOS)。
-            // MediaExtractor 内部会 dup fd,本方法返回后关闭 fd 是安全的
-            val fd = try {
-                assetManager.openFd(assetsPath)
-            } catch (e: Exception) {
-                throw java.io.IOException("openFd fail: $assetsPath", e)
-            }
-            try {
-                if (fd.declaredLength < 0) {
-                    extractor.setDataSource(fd.fileDescriptor)
-                } else {
-                    extractor.setDataSource(
-                        fd.fileDescriptor,
-                        fd.startOffset,
-                        fd.declaredLength
-                    )
-                }
-            } finally {
-                try {
-                    fd.close()
-                } catch (e: Exception) {
-                    ALog.e(TAG, "AssetsFileContainer close fd error $e")
-                }
-            }
-        }
-
-        override fun startRandomRead() {
-        }
-
-        override fun read(b: ByteArray, off: Int, len: Int): Int {
-            synchronized(streamLock) {
-                val stream = assetsInputStream ?: return -1
-                return try {
-                    stream.read(b, off, len)
-                } catch (e: Exception) {
-                    ALog.e(TAG, "AssetsFileContainer read error $e")
-                    -1
-                }
-            }
-        }
-
-        override fun skip(pos: Long) {
-            synchronized(streamLock) {
-                try {
-                    assetsInputStream?.skip(pos)
-                } catch (e: Exception) {
-                    ALog.e(TAG, "AssetsFileContainer skip error $e")
-                }
-            }
-        }
-
-        override fun closeRandomRead() {
-            synchronized(streamLock) {
-                closeStreamLocked()
-            }
-        }
-
-        override fun close() {
-            synchronized(streamLock) {
-                closeStreamLocked()
-            }
-        }
-
-        // 调用时必须持有 streamLock;幂等,重复调用不会重复释放 native 资源
-        private fun closeStreamLocked() {
-            try {
-                assetsInputStream?.close()
-            } catch (e: Exception) {
-                ALog.e(TAG, "AssetsFileContainer close stream error $e")
-            }
-            assetsInputStream = null
-        }
-
-        fun copy(): CustomAssetsFileContainer {
-            return CustomAssetsFileContainer(assetManager, assetsPath)
         }
     }
 }

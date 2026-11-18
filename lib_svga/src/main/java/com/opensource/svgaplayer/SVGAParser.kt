@@ -166,19 +166,14 @@ class SVGAParser private constructor(context: Context) {
                 notifyQueueError(memoryCacheKey, callback)
                 invokeErrorCallback(e, callback, path)
             }
-        }.apply {
-            invokeOnCompletion { exception ->
-                if (exception is CancellationException) {
-                    LogUtils.info(TAG, "================ decode $path from file canceled ================")
-                    //加载者被取消：仍有等待者则接管重载；接管自身被取消或无等待者时给等待队列补发错误
-                    val restarted = !isRestart && restartDecodeIfWaiting(memoryCacheKey, path) {
-                        startDecodeFromFile(path, config, null, null, memoryCacheKey, isRestart = true)
-                    }
-                    if (!restarted) {
-                        notifyQueueError(memoryCacheKey, callback)
-                    }
-                }
-            }
+        }.attachCancelTakeover(
+            source = "file",
+            alias = path,
+            memoryCacheKey = memoryCacheKey,
+            callback = callback,
+            isRestart = isRestart
+        ) {
+            startDecodeFromFile(path, config, null, null, memoryCacheKey, isRestart = true)
         }
     }
 
@@ -247,19 +242,14 @@ class SVGAParser private constructor(context: Context) {
                 notifyQueueError(memoryCacheKey, callback)
                 invokeErrorCallback(e, callback, name)
             }
-        }.apply {
-            invokeOnCompletion { exception ->
-                if (exception is CancellationException) {
-                    LogUtils.info(TAG, "================ decode $name from assets canceled ================")
-                    //加载者被取消：仍有等待者则接管重载；接管自身被取消或无等待者时给等待队列补发错误
-                    val restarted = !isRestart && restartDecodeIfWaiting(memoryCacheKey, name) {
-                        startDecodeFromAssets(name, config, null, null, memoryCacheKey, isRestart = true)
-                    }
-                    if (!restarted) {
-                        notifyQueueError(memoryCacheKey, callback)
-                    }
-                }
-            }
+        }.attachCancelTakeover(
+            source = "assets",
+            alias = name,
+            memoryCacheKey = memoryCacheKey,
+            callback = callback,
+            isRestart = isRestart
+        ) {
+            startDecodeFromAssets(name, config, null, null, memoryCacheKey, isRestart = true)
         }
     }
 
@@ -396,20 +386,18 @@ class SVGAParser private constructor(context: Context) {
             })
         }
         SVGADiskLoadingQueue.registerJob(cacheKey, job)
+        job.attachCancelTakeover(
+            source = "url",
+            alias = urlPath,
+            memoryCacheKey = memoryCacheKey,
+            callback = callback,
+            isRestart = isRestart
+        ) {
+            startDecodeFromURL(url, config, null, null, memoryCacheKey, isRestart = true)
+        }
         return job.apply {
             invokeOnCompletion { exception ->
                 if (exception is CancellationException) {
-                    LogUtils.info(
-                        TAG, "================ decode from url canceled: $urlPath ================"
-                    )
-                    //接管重载自身被取消（典型：App 退出、scope 级联）时不再递归重启，
-                    //直接清空等待队列并补发错误，避免协程级联导致的对象增长
-                    val restarted = !isRestart && restartDecodeIfWaiting(memoryCacheKey, urlPath) {
-                        startDecodeFromURL(url, config, null, null, memoryCacheKey, isRestart = true)
-                    }
-                    if (!restarted) {
-                        notifyQueueError(memoryCacheKey, callback)
-                    }
                     //磁盘队列接管：有等待者时才清掉 in-flight 并重启下载（等待者仍在 loadingMap，
                     //由接管下载完成时通知）；无等待者的普通 clear 不重启——
                     //否则取消反而触发一次后台全量重下，列表滑动同一 URL 时反复下载且永远下不完
@@ -432,6 +420,33 @@ class SVGAParser private constructor(context: Context) {
                 }
             }
         }
+    }
+
+    /**
+     * 加载任务被取消时的统一善后（收敛 file/assets/url 三个来源入口原先三段近似复制的取消接管逻辑）：
+     * 仍有同 key 等待者时由等待者接管重载（[reload] 须以 isRestart = true 阻断递归重启）；
+     * 接管成功或缓存已就绪时等待者由 [restartDecodeIfWaiting] 统一通知，
+     * 无等待者/接管被阻断时给直接回调补发错误。
+     * URL 路径安装本善后后，还会额外安装磁盘队列的接管善后（见 [startDecodeFromURL]）
+     */
+    private fun Job.attachCancelTakeover(
+        source: String,
+        alias: String?,
+        memoryCacheKey: String?,
+        callback: ParseCompletion?,
+        isRestart: Boolean,
+        reload: () -> Unit
+    ): Job {
+        invokeOnCompletion { exception ->
+            if (exception is CancellationException) {
+                LogUtils.info(TAG, "================ decode from $source canceled: $alias ================")
+                val restarted = !isRestart && restartDecodeIfWaiting(memoryCacheKey, alias, reload)
+                if (!restarted) {
+                    notifyQueueError(memoryCacheKey, callback)
+                }
+            }
+        }
+        return this
     }
 
     /**

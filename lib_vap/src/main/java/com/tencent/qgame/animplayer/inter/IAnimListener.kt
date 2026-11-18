@@ -32,6 +32,14 @@ package com.tencent.qgame.animplayer.inter
 
 import com.tencent.qgame.animplayer.AnimConfig
 
+/**
+ * 播放回调。
+ *
+ * 线程契约(AnimView 统一保证):
+ * [onVideoStart] / [onVideoRender] / [onVideoComplete] / [onVideoDestroy] / [onFailed]
+ * 均在主线程回调, 实现方可直接操作 UI;
+ * [onVideoConfigReady] 例外——因返回值参与启动决策, 在渲染线程同步回调, 不应做耗时操作
+ */
 interface IAnimListener {
 
     /**
