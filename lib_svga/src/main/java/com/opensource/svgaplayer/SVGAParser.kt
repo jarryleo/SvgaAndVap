@@ -27,6 +27,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.zip.InflaterInputStream
 import java.util.zip.ZipInputStream
@@ -36,12 +37,16 @@ import kotlin.coroutines.coroutineContext
 /**
  * Created by PonyCui 16/6/18.
  */
-private var fileLock: Any = Any()
-private var isUnzipping = false
-
 class SVGAParser private constructor(context: Context) {
     private var mContext = context.applicationContext
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * 按 cacheKey 的解压锁。旧实现是文件级全局 fileLock + isUnzipping 标志:
+     * 任意一个 key 在解压时, 其他不相干 key 也会进同一把锁串行等待(全局解压串行化),
+     * 且绕过对象封装属进程级可变状态。改为 per-key 锁后不同资源互不阻塞
+     */
+    private val unzipLocks = ConcurrentHashMap<String, Any>()
 
     /**
      * 与等待队列共用的锁：保证“读内存缓存 + 入队”与“写内存缓存 + 移除通知”两个复合操作互斥，
@@ -622,21 +627,7 @@ class SVGAParser private constructor(context: Context) {
                 }
                 if (isZipFile(magicCode)) {
                     LogUtils.info(TAG, "decode from zip file")
-                    if (!SVGAFileCache.buildCacheDir(cacheKey).exists() || isUnzipping) {
-                        synchronized(fileLock) {
-                            if (!SVGAFileCache.buildCacheDir(cacheKey).exists()) {
-                                isUnzipping = true
-                                LogUtils.info(TAG, "no cached, prepare to unzip")
-                                try {
-                                    unzip(inputStream, cacheKey)
-                                    LogUtils.info(TAG, "unzip success")
-                                } finally {
-                                    //异常路径同样复位全局标记，否则永久卡在 true
-                                    isUnzipping = false
-                                }
-                            }
-                        }
-                    }
+                    ensureUnzipped(inputStream, cacheKey)
                     decodeFromUnzipDirCacheKey(
                         cacheKey,
                         config,
@@ -1024,6 +1015,25 @@ class SVGAParser private constructor(context: Context) {
                 && bytes[1].toInt() == 75
                 && bytes[2].toInt() == 3
                 && bytes[3].toInt() == 4
+    }
+
+    /**
+     * 确保指定 key 的解压目录就绪（不存在则解压）。
+     * 同 key 并发调用串行化在 per-key 锁上: 后到者在锁内二次确认目录已存在即跳过解压,
+     * 直接复用首个持有者的成果(其未消费的 inputStream 由调用方 finally 关闭);
+     * 不同 key 各持各的锁, 互不阻塞。
+     * 锁条目刻意常驻不摘除——摘除后"解压失败重试"窗口内新调用会拿到新锁,
+     * 与旧锁持有者并发解压同一目录产生写冲突; 每条目仅一个空对象, 常驻成本可忽略
+     */
+    private fun ensureUnzipped(inputStream: InputStream, cacheKey: String) {
+        val lock = unzipLocks.computeIfAbsent(cacheKey) { Any() }
+        synchronized(lock) {
+            if (!SVGAFileCache.buildCacheDir(cacheKey).exists()) {
+                LogUtils.info(TAG, "no cached, prepare to unzip")
+                unzip(inputStream, cacheKey)
+                LogUtils.info(TAG, "unzip success")
+            }
+        }
     }
 
     // 解压

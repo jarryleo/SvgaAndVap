@@ -25,16 +25,15 @@ object SVGAFileCache {
     /** 默认容量上限(svga 通常为 zip 包 + 解压目录, 取较大额度) */
     internal const val DEFAULT_MAX_CACHE_BYTES = 256L * 1024 * 1024
 
-    private var cacheDir: String = "/"
-        get() {
-            if (field != "/") {
-                val dir = File(field)
-                if (!dir.exists()) {
-                    dir.mkdirs()
-                }
-            }
-            return field
-        }
+    /**
+     * 缓存根目录, 仅 [init] 赋值。
+     * 旧实现是 String 哨兵值("/") + 读取时 mkdirs 的副作用 getter——
+     * 未初始化时读取会静默落到文件系统根目录(冷启动加载失败的根源之一),
+     * 且"读路径即建目录"难以推理。现改为显式 [dir]: 未初始化时打错误日志并返回根目录兜底,
+     * 目录创建只发生在 [init](经 LruDiskCache.initAsync 的 mkdirs)
+     */
+    @Volatile
+    private var cacheDir: File? = null
 
     @Volatile
     private var diskCache: LruDiskCache? = null
@@ -42,9 +41,9 @@ object SVGAFileCache {
 
     internal fun init(context: Context) {
         if (isInitialized()) return
-        cacheDir = "${context.cacheDir.absolutePath}/svga/"
-        File(cacheDir).takeIf { !it.exists() }?.mkdirs()
-        diskCache = LruDiskCache(File(cacheDir), DEFAULT_MAX_CACHE_BYTES).apply { initAsync() }
+        val dir = File(context.cacheDir, "svga")
+        cacheDir = dir
+        diskCache = LruDiskCache(dir, DEFAULT_MAX_CACHE_BYTES).apply { initAsync() }
     }
 
     /** 调整容量上限(字节), 下一次写入/淘汰时生效 */
@@ -61,7 +60,7 @@ object SVGAFileCache {
             return
         }
         SvgaCoroutineManager.launchIo {
-            clearDir(cacheDir)
+            clearDir(dir().absolutePath)
             diskCache?.resetIndex()
             LogUtils.info(TAG, "Clear svga cache done!")
         }
@@ -88,7 +87,15 @@ object SVGAFileCache {
     }
 
     private fun isInitialized(): Boolean {
-        return "/" != cacheDir && File(cacheDir).exists()
+        val dir = cacheDir
+        return dir != null && dir.exists()
+    }
+
+    /** 未初始化时打错误日志并以根目录兜底(与旧行为一致, 便于暴露未 init 的接入错误) */
+    private fun dir(): File {
+        return cacheDir ?: File("/").also {
+            LogUtils.error(TAG, "SVGACache is not init! call SVGAManager.init first")
+        }
     }
 
     /**
@@ -127,15 +134,15 @@ object SVGAFileCache {
     internal fun buildCacheKey(url: URL): String = buildCacheKey(url.toString())
 
     internal fun buildCacheDir(cacheKey: String): File {
-        return File("$cacheDir$cacheKey/")
+        return File(dir(), cacheKey)
     }
 
     internal fun buildCacheFile(cacheKey: String): File {
-        return File("$cacheDir$cacheKey")
+        return File(dir(), cacheKey)
     }
 
     internal fun buildAudioFile(audio: String): File {
-        return File("$cacheDir$audio.mp3")
+        return File(dir(), "$audio.mp3")
     }
 
 }

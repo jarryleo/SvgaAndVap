@@ -1,10 +1,10 @@
 package com.tencent.qgame.animplayer
 
 import android.content.Context
+import cn.leo.base.AnimLibrary
 import cn.leo.base.cache.BitmapCache
 import cn.leo.base.cache.BitmapDiskCache
 import cn.leo.base.download.BitmapDownloadInterface
-import cn.leo.base.download.BitmapDownloader
 import cn.leo.base.download.DownloadStatus
 import cn.leo.base.download.FileDownloadManager
 import cn.leo.base.log.BaseLog
@@ -42,6 +42,8 @@ object VapManager {
         loggerProxy: ILogger? = BaseLog,
     ) {
         appContext = context.applicationContext
+        //公共依赖(appContext/lib_base 日志与下载器)统一转投库上下文聚合
+        AnimLibrary.init(context)
         VapFileCache.init(context)
         ALog.isLogEnable = logEnabled
         if (loggerProxy != null) {
@@ -50,10 +52,10 @@ object VapManager {
     }
 
     /**
-     * 设置bitmap下载器
+     * 设置bitmap下载器（转投 [AnimLibrary] 库上下文, svga/vap 共用）
      */
     fun setBitmapDownload(bitmapDownloadInterface: BitmapDownloadInterface) {
-        BitmapDownloader.bitmapDownloader = bitmapDownloadInterface
+        AnimLibrary.setBitmapDownloader(bitmapDownloadInterface)
     }
 
     fun clearCache() {

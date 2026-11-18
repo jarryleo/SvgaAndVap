@@ -2,10 +2,10 @@ package com.opensource.svgaplayer
 
 import android.content.Context
 import android.net.http.HttpResponseCache
+import cn.leo.base.AnimLibrary
 import cn.leo.base.cache.BitmapCache
 import cn.leo.base.cache.BitmapDiskCache
 import cn.leo.base.download.BitmapDownloadInterface
-import cn.leo.base.download.BitmapDownloader
 import cn.leo.base.log.ILogger
 import com.opensource.svgaplayer.cache.SVGAFileCache
 import com.opensource.svgaplayer.cache.SVGAMemoryCache
@@ -51,6 +51,8 @@ object SVGAManager {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        //公共依赖(appContext/lib_base 日志与下载器)统一转投库上下文聚合
+        AnimLibrary.init(context, logEnabled, loggerProxy)
         // 配置cache
         SVGAFileCache.init(context)
         //修改实体内存缓存字节预算（按实体 bitmap 真实字节数记账，超限 LRU 驱逐）
@@ -74,19 +76,21 @@ object SVGAManager {
     }
 
     /**
-     * 设置bitmap下载器
+     * 设置bitmap下载器（转投 [AnimLibrary] 库上下文, svga/vap 共用）
      */
     fun setBitmapDownload(bitmapDownloadInterface: BitmapDownloadInterface) {
-        BitmapDownloader.bitmapDownloader = bitmapDownloadInterface
+        AnimLibrary.setBitmapDownloader(bitmapDownloadInterface)
     }
 
     /**
-     * svga 预加载
+     * svga 预加载：批量预下载到磁盘缓存。
+     * 并行下发——旧实现按队列递归串行(一次只下一条, 异步回调驱动下一条), 批量预热很慢;
+     * 共享下载器自带并发额度(Semaphore)与同 url+file 在途去重, 并行下发天然限流且不会重复下载
      */
     fun preload(urlList: List<String>, width: Int, height: Int) {
         val urlDecoder = UrlDecoderManager.getUrlDecoder()
         val fileDownloader = FileDownloader()
-        val queue = urlList
+        urlList
             .asSequence()
             .filter { it.startsWith("http://") || it.startsWith("https://") }
             .map { urlDecoder.decodeSvgaUrl(it, width, height) }
@@ -106,30 +110,13 @@ object SVGAManager {
             .mapNotNull {
                 it
             }
-            .toMutableList()
-        preload(fileDownloader, queue, width, height)
-    }
-
-    private fun preload(
-        fileDownloader: FileDownloader,
-        queue: MutableList<URL>,
-        width: Int,
-        height: Int
-    ) {
-        val url = queue.removeFirstOrNull()
-        if (url != null) {
-            val cacheKey = SVGAFileCache.buildCacheKey(url)
-            val cachedType = SVGAFileCache.getCachedType(cacheKey)
-            if (cachedType != null) {
-                preload(fileDownloader, queue, width, height)
-                return
+            .forEach { url ->
+                val cacheKey = SVGAFileCache.buildCacheKey(url)
+                if (SVGAFileCache.getCachedType(cacheKey) == null) {
+                    //预加载是尽力而为: 成功即落盘, 失败静默(下次正式加载会重试)
+                    fileDownloader.resume(url, {}, {})
+                }
             }
-            fileDownloader.resume(url, {
-                preload(fileDownloader, queue, width, height)
-            }, {
-                preload(fileDownloader, queue, width, height)
-            })
-        }
     }
 
     /**
