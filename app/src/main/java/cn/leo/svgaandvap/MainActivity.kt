@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                     onOpenSvga = { startActivity(Intent(this, SvgaTestActivity::class.java)) },
                     onOpenSvgaList = { startActivity(Intent(this, SvgaListTestActivity::class.java)) },
                     onOpenVap = { startActivity(Intent(this, VapTestActivity::class.java)) },
+                    onOpenBitmapViewer = { startActivity(Intent(this, BitmapViewerActivity::class.java)) },
                     onClearCache = {
                         // 清除 SVGA 与 VAP 的内存缓存 + 文件缓存
                         SVGAManager.clearCache()
@@ -56,6 +57,7 @@ fun HomeScreen(
     onOpenSvga: () -> Unit,
     onOpenSvgaList: () -> Unit,
     onOpenVap: () -> Unit,
+    onOpenBitmapViewer: () -> Unit,
     onClearCache: () -> Unit,
 ) {
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -101,6 +103,15 @@ fun HomeScreen(
                     .height(56.dp),
             ) {
                 Text(text = "VAP 测试")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onOpenBitmapViewer,
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .height(56.dp),
+            ) {
+                Text(text = "SVGA Bitmap 查看")
             }
             Spacer(modifier = Modifier.height(32.dp))
             OutlinedButton(

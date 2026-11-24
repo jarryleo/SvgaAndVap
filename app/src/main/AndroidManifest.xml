@@ -32,6 +32,9 @@
         <activity
             android:name=".VapTestActivity"
             android:label="VAP 测试" />
+        <activity
+            android:name=".BitmapViewerActivity"
+            android:label="SVGA Bitmap 查看" />
     </application>
 
 </manifest>

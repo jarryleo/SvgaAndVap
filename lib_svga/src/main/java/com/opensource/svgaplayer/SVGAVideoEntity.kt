@@ -36,6 +36,9 @@ class SVGAVideoEntity {
     var antiAlias = true
     var movieItem: MovieEntity? = null
 
+    /** 调试用: prepare 装配完成后 movieItem 被置空前保留的控制结构 JSON 快照 */
+    var specJsonText: String? = null
+
     var videoSize = SVGARect(0.0, 0.0, 0.0, 0.0)
         private set
 
@@ -53,6 +56,9 @@ class SVGAVideoEntity {
     //线程模型: IO 线程构造期写入, 之后仅读(主线程 drawer 读、LruCache sizeOf 在任意线程读)。
     //用并发容器兜底跨线程可见性, 不再依赖 handler.post/LruCache 锁的顺带 happens-before
     internal var imageMap = ConcurrentHashMap<String, Bitmap>()
+
+    /** 调试用: 只读暴露全部已解码 bitmap (key -> bitmap) */
+    fun bitmapEntries(): Map<String, Bitmap> = imageMap
     private var mCacheDir: File
     private var mFrameHeight = 0
     private var mFrameWidth = 0
@@ -197,16 +203,18 @@ class SVGAVideoEntity {
             audioPrepared = true
             prepareLoadSuccessCallback()
         } else {
-            SvgaCoroutineManager.launchIo(childJob = job) {
-                setupAudios(item) {
-                    audioPrepared = true
-                    //音频装配是 movieItem 的最后一个消费方，用完即丢源实体：
-                    //movieItem.images 持有整个 SVGA 的压缩图片/音频字节（可能上百 MB），
-                    //实体入内存缓存后保留它等于在 bitmap 记账之外无上限驻留源文件数据
-                    movieItem = null
-                    prepareLoadSuccessCallback()
+                SvgaCoroutineManager.launchIo(childJob = job) {
+                    setupAudios(item) {
+                        audioPrepared = true
+                        //音频装配是 movieItem 的最后一个消费方，用完即丢源实体：
+                        //movieItem.images 持有整个 SVGA 的压缩图片/音频字节（可能上百 MB），
+                        //实体入内存缓存后保留它等于在 bitmap 记账之外无上限驻留源文件数据
+                        //调试用: 置空前保留控制结构 JSON 快照
+                        specJsonText = runCatching { movieItemToJsonText(item) }.getOrNull()
+                        movieItem = null
+                        prepareLoadSuccessCallback()
+                    }
                 }
-            }
         }
     }
 
@@ -515,3 +523,46 @@ class SVGAVideoEntity {
 
 typealias PrepareCallback = () -> Unit
 
+
+/** 调试用: 把 Wire 生成的 Message 递归转成带缩进的 JSON 文本(反射遍历 public 实例字段) */
+private val SPEC_JSON_SKIP = Any()
+
+private fun movieItemToJsonText(value: Any): String {
+    //SKIP 占位: ByteString(图片/音频原始字节)不转文本, 含它的字段/条目整体省略
+    fun toJava(v: Any?): Any = when (v) {
+        null -> JSONObject.NULL
+        SPEC_JSON_SKIP -> SPEC_JSON_SKIP
+        is com.squareup.wire.Message<*, *> -> JSONObject().apply {
+            for (f in v.javaClass.fields) {
+                if (java.lang.reflect.Modifier.isStatic(f.modifiers)) continue
+                val fv = f.get(v) ?: continue
+                if (fv is List<*> && fv.isEmpty()) continue
+                if (fv is Map<*, *> && fv.isEmpty()) continue
+                val conv = toJava(fv)
+                if (conv === SPEC_JSON_SKIP) continue
+                put(f.name, conv)
+            }
+        }
+        is List<*> -> org.json.JSONArray().apply { v.forEach { val c = toJava(it); if (c !== SPEC_JSON_SKIP) put(c) } }
+        is Map<*, *> -> JSONObject().apply {
+            v.forEach { (k, mv) ->
+                if (mv is okio.ByteString) {
+                    //图片字节位置替换为图片名(条目 key), 便于观察结构
+                    put(k.toString(), k.toString())
+                } else {
+                    val conv = toJava(mv)
+                    if (conv !== SPEC_JSON_SKIP) put(k.toString(), conv)
+                }
+            }
+        }
+        is okio.ByteString -> SPEC_JSON_SKIP
+        is Boolean, is Number, is String -> v
+        else -> v.toString()
+    }
+    val json = toJava(value)
+    return when (json) {
+        is JSONObject -> json.toString(2)
+        is org.json.JSONArray -> json.toString(2)
+        else -> json.toString()
+    }
+}
