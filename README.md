@@ -37,15 +37,15 @@ dependencyResolutionManagement {
 
 ```kotlin
 // 只要 SVGA
-implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.3")
+implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.7")
 
 // 只要 VAP
-implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.3")
+implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.7")
 
 // SVGA + VAP 都要
-implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.3")
-implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.3")
+implementation("com.github.jarryleo.SvgaAndVap:lib_svga:1.0.7")
+implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.7")
 
 // Compose 版（自动包含 lib_svga + lib_vap）
-implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.3")
+implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.7")
 ```

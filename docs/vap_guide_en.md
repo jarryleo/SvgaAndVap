@@ -33,7 +33,7 @@ dependencyResolutionManagement {
 }
 
 // build.gradle.kts — VAP only; lib_base is pulled in transitively
-implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.3")
+implementation("com.github.jarryleo.SvgaAndVap:lib_vap:1.0.7")
 ```
 
 Replace the version with the latest [Release tag](https://github.com/jarryleo/SvgaAndVap/tags).
@@ -201,7 +201,7 @@ animView.enableVersion1(true)           // legacy mp4 compat (deprecated; only f
 Switch the dependency to:
 
 ```kotlin
-implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.3")
+implementation("com.github.jarryleo.SvgaAndVap:lib_compose:1.0.7")
 // transitively includes lib_svga / lib_vap / lib_base
 ```
 
