@@ -36,6 +36,12 @@ abstract class BitmapDecoder<T> {
         val source = runCatching { onCreateSource(data) }.getOrNull() ?: return null
         return runCatching {
             ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                // 默认allocator在Android S+产出HARDWARE位图: 解码后经EGL同步上传GPU, 而svga/vap需要
+                // 可读像素的软件位图, HARDWARE会落到ensureGlCompatibleConfig的copy(ARGB_8888)再做一次GPU回读。
+                // 每张图两次CPU<->GPU同步往返, 耗时与图尺寸无关(实测Android 15机型单张约15ms),
+                // 序列帧类svga(上百张小图)的磁盘缓存加载被放大到数秒。
+                // 显式ALLOCATOR_SOFTWARE直接产出ARGB_8888软件位图
+                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE)
                 // 广色域/16bit源默认解码为RGBA_F16, GLUtils.texImage2D不支持该配置
                 // (vap动态图上传纹理时抛invalid Bitmap format, 中断整个播放流程),
                 // 指定sRGB目标色彩空间保证输出8bit位图(ARGB_8888),
@@ -59,7 +65,9 @@ abstract class BitmapDecoder<T> {
 
     /**
      * 安全网: 保证解码结果配置可被GLUtils.texImage2D上传(仅支持ARGB_8888/RGB_565),
-     * 其余配置(RGBA_F16等)拷贝为ARGB_8888; 拷贝失败返回null, 调用方降级到BitmapFactory路径
+     * 其余配置(RGBA_F16等)拷贝为ARGB_8888; 拷贝失败返回null, 调用方降级到BitmapFactory路径。
+     * HARDWARE位图(默认allocator在Android S+的产物)同样能经此拷贝转换, 但copy是GPU回读,
+     * 已在decodeByImageDecoder用ALLOCATOR_SOFTWARE从源头避免, 这里仅作兜底
      */
     private fun ensureGlCompatibleConfig(bitmap: Bitmap?): Bitmap? {
         if (bitmap == null) return null
